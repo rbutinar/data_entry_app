@@ -8,36 +8,7 @@ from backend.models.models import User, Table, UserTableAccess
 
 router = APIRouter()
 
-def get_mock_data(table_name: str) -> list:
-    """
-    Return mock data for development tables.
-    """
-    if table_name == "customers":
-        return [
-            {"id": 1, "first_name": "John", "last_name": "Doe", "email": "john.doe@example.com", "phone": "555-123-4567", "address": "123 Main St", "city": "New York", "country": "USA"},
-            {"id": 2, "first_name": "Jane", "last_name": "Smith", "email": "jane.smith@example.com", "phone": "555-987-6543", "address": "456 Oak Ave", "city": "Los Angeles", "country": "USA"},
-            {"id": 3, "first_name": "Michael", "last_name": "Johnson", "email": "michael.j@example.com", "phone": "555-567-8901", "address": "789 Pine Rd", "city": "Chicago", "country": "USA"},
-            {"id": 4, "first_name": "Emily", "last_name": "Brown", "email": "emily.b@example.com", "phone": "555-234-5678", "address": "321 Elm St", "city": "Houston", "country": "USA"},
-            {"id": 5, "first_name": "David", "last_name": "Wilson", "email": "david.w@example.com", "phone": "555-345-6789", "address": "654 Maple Dr", "city": "Phoenix", "country": "USA"}
-        ]
-    elif table_name == "orders":
-        return [
-            {"id": 1, "customer_id": 1, "order_date": "2023-01-15", "total_amount": 125.99, "status": "Completed"},
-            {"id": 2, "customer_id": 2, "order_date": "2023-02-20", "total_amount": 89.50, "status": "Completed"},
-            {"id": 3, "customer_id": 3, "order_date": "2023-03-10", "total_amount": 210.75, "status": "Processing"},
-            {"id": 4, "customer_id": 1, "order_date": "2023-04-05", "total_amount": 45.25, "status": "Completed"},
-            {"id": 5, "customer_id": 4, "order_date": "2023-05-12", "total_amount": 175.00, "status": "Shipped"}
-        ]
-    elif table_name == "products":
-        return [
-            {"id": 1, "name": "Laptop", "description": "High-performance laptop with 16GB RAM", "price": 999.99, "category": "Electronics", "stock": 25},
-            {"id": 2, "name": "Smartphone", "description": "Latest model with 128GB storage", "price": 699.99, "category": "Electronics", "stock": 50},
-            {"id": 3, "name": "Desk Chair", "description": "Ergonomic office chair", "price": 199.99, "category": "Furniture", "stock": 15},
-            {"id": 4, "name": "Coffee Maker", "description": "Programmable coffee maker", "price": 49.99, "category": "Appliances", "stock": 30},
-            {"id": 5, "name": "Headphones", "description": "Noise-cancelling wireless headphones", "price": 149.99, "category": "Electronics", "stock": 40}
-        ]
-    else:
-        return []
+# Removed get_mock_data; only real database tables are supported.
 
 async def check_table_access(
     table_name: str, 
@@ -47,13 +18,22 @@ async def check_table_access(
     """
     Check if the user has access to the specified table.
     """
-    # For development mode: If user_id is 999, allow access to any table
-    if user_id == 999:
-        print(f"Development mode: Allowing access to table '{table_name}' for development user")
-        # For development tables that don't exist in the database
-        dev_tables = ["customers", "orders", "products"]
-        if table_name in dev_tables:
-            return True
+    # For development mode: If user_id is 999 or 1, allow access to any table
+    if user_id == 999 or user_id == 1:
+        print(f"Development mode: Allowing access to table '{table_name}' for user ID {user_id}")
+        
+        # Check if the table exists in the database schema
+        from sqlalchemy import inspect
+        inspector = inspect(db.get_bind())
+        db_table_names = inspector.get_table_names()
+        
+        if table_name not in db_table_names:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Table '{table_name}' not found in database"
+            )
+        
+        return True
     
     # Get the table ID
     table = db.query(Table).filter(Table.name == table_name).first()
@@ -62,10 +42,6 @@ async def check_table_access(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Table '{table_name}' not found"
         )
-    
-    # For development mode: If user_id is 999, allow access to any table in the database
-    if user_id == 999:
-        return True
     
     # Check user access
     access = db.query(UserTableAccess).filter(
@@ -95,35 +71,6 @@ async def get_table_data(
     Get data from a table with pagination and optional filtering.
     """
     print(f"\n\n=== GET TABLE DATA ===\nTable: {table_name}\nUser: {current_user}\n======================")
-    
-    # For development tables, return mock data
-    dev_tables = ["customers", "orders", "products"]
-    if table_name in dev_tables:
-        print(f"Returning mock data for table '{table_name}'")
-        # Return mock data based on the table name
-        mock_data = get_mock_data(table_name)
-        
-        # Apply filtering if specified
-        if filter_column and filter_value:
-            filtered_data = []
-            for item in mock_data:
-                if filter_column in item and filter_value.lower() in str(item[filter_column]).lower():
-                    filtered_data.append(item)
-            mock_data = filtered_data
-        
-        # Apply pagination
-        total_count = len(mock_data)
-        start_idx = (page - 1) * page_size
-        end_idx = min(start_idx + page_size, total_count)
-        paginated_data = mock_data[start_idx:end_idx]
-        
-        return {
-            "total": total_count,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (total_count + page_size - 1) // page_size,
-            "data": paginated_data
-        }
     
     # Check if the table exists in the database schema
     from sqlalchemy import inspect
@@ -196,27 +143,59 @@ async def update_row(
     # Check if user has access to the table
     await check_table_access(table_name, current_user["id"], db)
     
-    # Build the update query
-    set_clause = ", ".join([f"{key} = :{key}" for key in updates.keys()])
-    query = f"UPDATE {table_name} SET {set_clause} WHERE id = :row_id"
-    
-    # Add row_id to the parameters
-    params = {**updates, "row_id": row_id}
-    
     try:
-        # Execute the update
-        with engine.connect() as connection:
-            result = connection.execute(text(query), params)
+        # Try direct raw SQL execution using pyodbc for better permission handling
+        # Get the raw connection from SQLAlchemy
+        connection = db.connection()
+        cursor = connection.connection.cursor()
+
+        # Dynamically detect the primary key column for the table
+        from sqlalchemy import inspect
+        inspector = inspect(db.get_bind())
+        pk_cols = inspector.get_pk_constraint(table_name, schema="dbo")
+        if not pk_cols or not pk_cols['constrained_columns']:
+            raise HTTPException(status_code=500, detail=f"Table {table_name} has no primary key.")
+        pk_col = pk_cols['constrained_columns'][0]
+
+        # Build the update query using parameterized statements
+        set_parts = []
+        values = []
+
+        for key, value in updates.items():
+            set_parts.append(f"{key} = ?")
+            values.append(value)
+
+        # Add the row_id parameter at the end
+        values.append(row_id)
+
+        set_clause = ", ".join(set_parts)
+        query = f"UPDATE {table_name} SET {set_clause} WHERE {pk_col} = ?"
+        print(f"Executing query: {query} with values: {values}")
+
+        try:
+            # Execute the update
+            cursor.execute(query, values)
+            rows_affected = cursor.rowcount
             connection.commit()
-            
-            if result.rowcount == 0:
+
+            if rows_affected == 0:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Row with ID {row_id} not found in table '{table_name}'"
+                    detail=f"Row {row_id} not found in table {table_name}"
                 )
-            
-            return {"message": f"Row {row_id} updated successfully"}
+            else:
+                return {"message": f"Row {row_id} updated successfully"}
+
+        except Exception as sql_error:
+            # Roll back on error
+            connection.rollback()
+            print(f"SQL Error: {sql_error}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Database error: {str(sql_error)}"
+            )
     except Exception as e:
+        print(f"General Error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating row: {str(e)}"
@@ -235,20 +214,62 @@ async def insert_row(
     # Check if user has access to the table
     await check_table_access(table_name, current_user["id"], db)
     
-    # Build the insert query
-    columns = ", ".join(data.keys())
-    placeholders = ", ".join([f":{key}" for key in data.keys()])
-    query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
-    
     try:
-        # Execute the insert
-        with engine.connect() as connection:
-            result = connection.execute(text(query), data)
+        # Try direct raw SQL execution using pyodbc for better permission handling
+        # Get the raw connection from SQLAlchemy
+        connection = db.connection()
+        cursor = connection.connection.cursor()
+
+        # Dynamically detect the primary key column for the table
+        from sqlalchemy import inspect
+        inspector = inspect(db.get_bind())
+        pk_cols = inspector.get_pk_constraint(table_name, schema="dbo")
+        if not pk_cols or not pk_cols['constrained_columns']:
+            pk_col = None
+        else:
+            pk_col = pk_cols['constrained_columns'][0]
+
+        # Build the insert query using parameterized statements for security
+        columns = ", ".join(data.keys())
+        placeholders = ", ".join(["?" for _ in data.keys()])
+        values = list(data.values())
+
+        # Use direct SQL execution with pyodbc
+        try:
+            # For SQL Server, we use this format to get back the inserted PK (if exists)
+            if pk_col:
+                query = f"INSERT INTO {table_name} ({columns}) OUTPUT INSERTED.{pk_col} VALUES ({placeholders})"
+            else:
+                query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
+            print(f"Executing query: {query} with values: {values}")
+
+            cursor.execute(query, values)
+            new_id = None
+            if pk_col:
+                row = cursor.fetchone()
+                if row:
+                    new_id = row[0]
+            # Commit the transaction
             connection.commit()
-            
-            # In a real implementation, you would return the ID of the newly inserted row
-            return {"message": "Row inserted successfully"}
+
+            if new_id is not None:
+                return {"message": "Row inserted successfully", pk_col: new_id}
+            else:
+                return {"message": "Row inserted successfully"}
+
+        except Exception as sql_error:
+            # Roll back on error
+            connection.rollback()
+            print(f"SQL Error: {sql_error}")
+            # Return a detailed error message
+            error_msg = str(sql_error)
+            print(f"SQL Error: {error_msg}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Database error: {error_msg}"
+            )
     except Exception as e:
+        print(f"General Error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error inserting row: {str(e)}"
@@ -264,26 +285,64 @@ async def delete_row(
     """
     Delete a specific row from a table.
     """
-    # Check if user has access to the table
-    await check_table_access(table_name, current_user["id"], db)
-    
-    # Build the delete query
-    query = f"DELETE FROM {table_name} WHERE id = :row_id"
-    
+    print(f"[DEBUG] DELETE endpoint called for table: {table_name}, row_id: {row_id}, user: {current_user}")
     try:
-        # Execute the delete
-        with engine.connect() as connection:
-            result = connection.execute(text(query), {"row_id": row_id})
+        print("[DEBUG] Checking table access...")
+        await check_table_access(table_name, current_user["id"], db)
+        print("[DEBUG] Table access granted.")
+        
+        # Try direct raw SQL execution using pyodbc for better permission handling
+        print("[DEBUG] Getting raw connection from SQLAlchemy...")
+        connection = db.connection()
+        cursor = connection.connection.cursor()
+        print("[DEBUG] Raw connection and cursor acquired.")
+        
+        # Dynamically detect the primary key column for the table
+        from sqlalchemy import inspect
+        print("[DEBUG] Inspecting table for primary key...")
+        inspector = inspect(db.get_bind())
+        pk_cols = inspector.get_pk_constraint(table_name, schema="dbo")
+        print(f"[DEBUG] PK constraint info: {pk_cols}")
+        if not pk_cols or not pk_cols['constrained_columns']:
+            print(f"[ERROR] Table {table_name} has no primary key.")
+            raise HTTPException(status_code=500, detail=f"Table {table_name} has no primary key.")
+        pk_col = pk_cols['constrained_columns'][0]
+        print(f"[DEBUG] Using primary key column: {pk_col}")
+
+        # Build the delete query using parameterized statements
+        query = f"DELETE FROM {table_name} WHERE {pk_col} = ?"
+        print(f"[DEBUG] Prepared query: {query} with values: [{row_id}]")
+        
+        try:
+            print("[DEBUG] Executing delete query...")
+            cursor.execute(query, [row_id])
+            rows_affected = cursor.rowcount
+            print(f"[DEBUG] Rows affected: {rows_affected}")
+            print("[DEBUG] Committing transaction...")
             connection.commit()
+            print("[DEBUG] Transaction committed.")
             
-            if result.rowcount == 0:
+            if rows_affected == 0:
+                print(f"[DEBUG] No rows found to delete for row_id {row_id} in table {table_name}")
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Row with ID {row_id} not found in table '{table_name}'"
+                    detail=f"Row {row_id} not found in table {table_name}"
                 )
-            
-            return {"message": f"Row {row_id} deleted successfully"}
+            else:
+                print(f"[DEBUG] Row {row_id} deleted successfully from table {table_name}")
+                return {"message": f"Row {row_id} deleted successfully"}
+                
+        except Exception as sql_error:
+            print(f"[ERROR] SQL error during delete: {sql_error}")
+            # Roll back on error
+            connection.rollback()
+            print(f"[DEBUG] Rolled back transaction due to SQL error.")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Database error: {str(sql_error)}"
+            )
     except Exception as e:
+        print(f"[ERROR] General error in delete_row: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting row: {str(e)}"

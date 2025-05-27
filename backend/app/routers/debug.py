@@ -7,38 +7,6 @@ from typing import List, Dict, Any
 
 router = APIRouter()
 
-# Mock data for development tables
-def get_mock_data(table_name: str) -> list:
-    """
-    Return mock data for development tables.
-    """
-    if table_name == "customers":
-        return [
-            {"id": 1, "first_name": "John", "last_name": "Doe", "email": "john.doe@example.com", "phone": "555-123-4567", "address": "123 Main St", "city": "New York", "country": "USA"},
-            {"id": 2, "first_name": "Jane", "last_name": "Smith", "email": "jane.smith@example.com", "phone": "555-987-6543", "address": "456 Oak Ave", "city": "Los Angeles", "country": "USA"},
-            {"id": 3, "first_name": "Michael", "last_name": "Johnson", "email": "michael.j@example.com", "phone": "555-567-8901", "address": "789 Pine Rd", "city": "Chicago", "country": "USA"},
-            {"id": 4, "first_name": "Emily", "last_name": "Brown", "email": "emily.b@example.com", "phone": "555-234-5678", "address": "321 Elm St", "city": "Houston", "country": "USA"},
-            {"id": 5, "first_name": "David", "last_name": "Wilson", "email": "david.w@example.com", "phone": "555-345-6789", "address": "654 Maple Dr", "city": "Phoenix", "country": "USA"}
-        ]
-    elif table_name == "orders":
-        return [
-            {"id": 1, "customer_id": 1, "order_date": "2023-01-15", "total_amount": 125.99, "status": "Completed"},
-            {"id": 2, "customer_id": 2, "order_date": "2023-02-20", "total_amount": 89.50, "status": "Completed"},
-            {"id": 3, "customer_id": 3, "order_date": "2023-03-10", "total_amount": 210.75, "status": "Processing"},
-            {"id": 4, "customer_id": 1, "order_date": "2023-04-05", "total_amount": 45.25, "status": "Completed"},
-            {"id": 5, "customer_id": 4, "order_date": "2023-05-12", "total_amount": 175.00, "status": "Shipped"}
-        ]
-    elif table_name == "products":
-        return [
-            {"id": 1, "name": "Laptop", "description": "High-performance laptop with 16GB RAM", "price": 999.99, "category": "Electronics", "stock": 25},
-            {"id": 2, "name": "Smartphone", "description": "Latest model with 128GB storage", "price": 699.99, "category": "Electronics", "stock": 50},
-            {"id": 3, "name": "Desk Chair", "description": "Ergonomic office chair", "price": 199.99, "category": "Furniture", "stock": 15},
-            {"id": 4, "name": "Coffee Maker", "description": "Programmable coffee maker", "price": 49.99, "category": "Appliances", "stock": 30},
-            {"id": 5, "name": "Headphones", "description": "Noise-cancelling wireless headphones", "price": 149.99, "category": "Electronics", "stock": 40}
-        ]
-    else:
-        return []
-
 @router.patch("/test-table-data/{table_name}/{row_id}")
 async def update_test_table_row(
     table_name: str,
@@ -52,12 +20,6 @@ async def update_test_table_row(
     try:
         print(f"\n\n=== UPDATE TEST TABLE ROW ===\nTable: {table_name}\nRow ID: {row_id}\nUpdates: {updates}\n===========================")
         
-        # For development tables, just return success
-        dev_tables = ["customers", "orders", "products"]
-        if table_name in dev_tables:
-            print(f"Mock update for development table '{table_name}'")
-            return {"success": True, "message": f"Row {row_id} updated successfully in table {table_name} (mock)"}
-        
         # Check if the table exists in the database schema
         from sqlalchemy import inspect, text
         inspector = inspect(db.get_bind())
@@ -66,33 +28,50 @@ async def update_test_table_row(
         if table_name not in db_table_names:
             return {"success": False, "error": f"Table '{table_name}' not found in database"}
         
-        # Build the update query
-        set_clauses = []
-        params = {}
-        
-        for key, value in updates.items():
-            set_clauses.append(f"{key} = :value_{key}")
-            params[f"value_{key}"] = value
-        
-        if not set_clauses:
-            return {"success": False, "error": "No updates provided"}
-        
-        query = f"UPDATE {table_name} SET {', '.join(set_clauses)} WHERE id = :row_id"
-        params["row_id"] = row_id
-        
-        # Execute the query
-        with engine.connect() as connection:
+        try:
+            # Try direct raw SQL execution using pyodbc for better permission handling
+            # Get the raw connection from SQLAlchemy
+            connection = db.connection()
+            cursor = connection.connection.cursor()
+            
+            # Build the update query using parameterized statements
+            set_parts = []
+            values = []
+            
+            for key, value in updates.items():
+                set_parts.append(f"{key} = ?")
+                values.append(value)
+                
+            # Add the row_id parameter at the end
+            values.append(row_id)
+            
+            set_clause = ", ".join(set_parts)
+            query = f"UPDATE {table_name} SET {set_clause} WHERE id = ?"
+            print(f"Executing query: {query} with values: {values}")
+            
             try:
-                connection.execute(text(query), params)
+                # Execute the update
+                cursor.execute(query, values)
+                rows_affected = cursor.rowcount
                 connection.commit()
-                return {"success": True, "message": f"Row {row_id} updated successfully in table {table_name}"}
-            except Exception as e:
+                
+                if rows_affected == 0:
+                    return {"success": False, "error": f"Row {row_id} not found in table {table_name}"}
+                else:
+                    return {"success": True, "message": f"Row {row_id} updated successfully in table {table_name}"}
+                    
+            except Exception as sql_error:
+                # Roll back on error
                 connection.rollback()
-                print(f"Error executing update query: {str(e)}")
-                return {"success": False, "error": str(e)}
+                print(f"SQL Error: {sql_error}")
+                return {"success": False, "error": f"SQL Error: {str(sql_error)}"}
+        except Exception as conn_error:
+            print(f"Connection error: {conn_error}")
+            return {"success": False, "error": f"Connection error: {str(conn_error)}"}
+            
     except Exception as e:
         print(f"Error updating row: {str(e)}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": f"Error updating row: {str(e)}"}
 
 @router.post("/test-table-data/{table_name}")
 async def insert_test_table_row(
@@ -106,12 +85,6 @@ async def insert_test_table_row(
     try:
         print(f"\n\n=== INSERT TEST TABLE ROW ===\nTable: {table_name}\nData: {data}\n===========================")
         
-        # For development tables, just return success with a mock ID
-        dev_tables = ["customers", "orders", "products"]
-        if table_name in dev_tables:
-            print(f"Mock insert for development table '{table_name}'")
-            return {"success": True, "id": 999, "message": f"Row inserted successfully into table {table_name} (mock)"}
-        
         # Check if the table exists in the database schema
         from sqlalchemy import inspect, text
         inspector = inspect(db.get_bind())
@@ -120,39 +93,68 @@ async def insert_test_table_row(
         if table_name not in db_table_names:
             return {"success": False, "error": f"Table '{table_name}' not found in database"}
         
-        # Build the insert query
-        columns = list(data.keys())
-        placeholders = [f":{col}" for col in columns]
-        
-        if not columns:
-            return {"success": False, "error": "No data provided"}
-        
-        query = f"INSERT INTO {table_name} ({', '.join(columns)}) OUTPUT INSERTED.id VALUES ({', '.join(placeholders)})"
-        
-        # Execute the query
-        with engine.connect() as connection:
+        try:
+            # Try direct raw SQL execution using pyodbc for better permission handling
+            # Get the raw connection from SQLAlchemy
+            connection = db.connection()
+            cursor = connection.connection.cursor()
+            
+            # Build the insert query using parameterized statements for security
+            columns = ", ".join(data.keys())
+            placeholders = ", ".join(["?" for _ in data.keys()])
+            values = list(data.values())
+            
+            # Use direct SQL execution with pyodbc
             try:
-                result = connection.execute(text(query), data)
-                connection.commit()
-                # Try to get the inserted ID
-                inserted_id = None
-                try:
-                    inserted_id = result.scalar()
-                except:
-                    pass
+                # For SQL Server, we use this format to get back the inserted ID
+                query = f"INSERT INTO {table_name} ({columns}) OUTPUT INSERTED.id VALUES ({placeholders})"
+                print(f"Executing query: {query} with values: {values}")
                 
-                return {
-                    "success": True, 
-                    "id": inserted_id, 
-                    "message": f"Row inserted successfully into table {table_name}"
-                }
-            except Exception as e:
+                cursor.execute(query, values)
+                row = cursor.fetchone()
+                if row:
+                    new_id = row[0]
+                else:
+                    new_id = None
+                    
+                # Commit the transaction
+                connection.commit()
+                
+                if new_id is not None:
+                    return {
+                        "success": True, 
+                        "id": new_id, 
+                        "message": f"Row inserted successfully into table {table_name}"
+                    }
+                else:
+                    return {
+                        "success": True, 
+                        "id": 9999, 
+                        "message": f"Row inserted successfully into table {table_name} but ID not returned"
+                    }
+                    
+            except Exception as sql_error:
+                # Roll back on error
                 connection.rollback()
-                print(f"Error executing insert query: {str(e)}")
-                return {"success": False, "error": str(e)}
+                print(f"SQL Error: {sql_error}")
+                # Return a detailed error message
+                error_msg = str(sql_error)
+                return {
+                    "success": False, 
+                    "error": f"Database error: {error_msg}"
+                }
+        except Exception as conn_error:
+            print(f"Connection error: {conn_error}")
+            return {
+                "success": False, 
+                "error": f"Connection error: {str(conn_error)}"
+            }
     except Exception as e:
         print(f"Error inserting row: {str(e)}")
-        return {"success": False, "error": str(e)}
+        return {
+            "success": False, 
+            "error": f"Error inserting row: {str(e)}"
+        }
 
 @router.delete("/test-table-data/{table_name}/{row_id}")
 async def delete_test_table_row(
@@ -166,12 +168,6 @@ async def delete_test_table_row(
     try:
         print(f"\n\n=== DELETE TEST TABLE ROW ===\nTable: {table_name}\nRow ID: {row_id}\n===========================")
         
-        # For development tables, just return success
-        dev_tables = ["customers", "orders", "products"]
-        if table_name in dev_tables:
-            print(f"Mock delete for development table '{table_name}'")
-            return {"success": True, "message": f"Row {row_id} deleted successfully from table {table_name} (mock)"}
-        
         # Check if the table exists in the database schema
         from sqlalchemy import inspect, text
         inspector = inspect(db.get_bind())
@@ -180,22 +176,38 @@ async def delete_test_table_row(
         if table_name not in db_table_names:
             return {"success": False, "error": f"Table '{table_name}' not found in database"}
         
-        # Build the delete query
-        query = f"DELETE FROM {table_name} WHERE id = :row_id"
-        
-        # Execute the query
-        with engine.connect() as connection:
+        try:
+            # Try direct raw SQL execution using pyodbc for better permission handling
+            # Get the raw connection from SQLAlchemy
+            connection = db.connection()
+            cursor = connection.connection.cursor()
+            
+            # Build the delete query using parameterized statements
+            query = f"DELETE FROM {table_name} WHERE id = ?"
+            print(f"Executing query: {query} with values: [{row_id}]")
+            
             try:
-                connection.execute(text(query), {"row_id": row_id})
+                # Execute the delete
+                cursor.execute(query, [row_id])
+                rows_affected = cursor.rowcount
                 connection.commit()
-                return {"success": True, "message": f"Row {row_id} deleted successfully from table {table_name}"}
-            except Exception as e:
+                
+                if rows_affected == 0:
+                    return {"success": False, "error": f"Row {row_id} not found in table {table_name}"}
+                else:
+                    return {"success": True, "message": f"Row {row_id} deleted successfully from table {table_name}"}
+                    
+            except Exception as sql_error:
+                # Roll back on error
                 connection.rollback()
-                print(f"Error executing delete query: {str(e)}")
-                return {"success": False, "error": str(e)}
+                print(f"SQL Error: {sql_error}")
+                return {"success": False, "error": f"SQL Error: {str(sql_error)}"}
+        except Exception as conn_error:
+            print(f"Connection error: {conn_error}")
+            return {"success": False, "error": f"Connection error: {str(conn_error)}"}
     except Exception as e:
         print(f"Error deleting row: {str(e)}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": f"Error deleting row: {str(e)}"}
 
 @router.get("/test-table-data/{table_name}")
 async def get_test_table_data(
@@ -211,35 +223,6 @@ async def get_test_table_data(
     """
     try:
         print(f"\n\n=== GET TEST TABLE DATA ===\nTable: {table_name}\n=========================")
-        
-        # For development tables, return mock data
-        dev_tables = ["customers", "orders", "products"]
-        if table_name in dev_tables:
-            print(f"Returning mock data for table '{table_name}'")
-            # Return mock data based on the table name
-            mock_data = get_mock_data(table_name)
-            
-            # Apply filtering if specified
-            if filter_column and filter_value:
-                filtered_data = []
-                for item in mock_data:
-                    if filter_column in item and filter_value.lower() in str(item[filter_column]).lower():
-                        filtered_data.append(item)
-                mock_data = filtered_data
-            
-            # Apply pagination
-            total_count = len(mock_data)
-            start_idx = (page - 1) * page_size
-            end_idx = min(start_idx + page_size, total_count)
-            paginated_data = mock_data[start_idx:end_idx]
-            
-            return {
-                "total": total_count,
-                "page": page,
-                "page_size": page_size,
-                "total_pages": (total_count + page_size - 1) // page_size,
-                "data": paginated_data
-            }
         
         # Check if the table exists in the database schema
         from sqlalchemy import inspect, text
@@ -326,19 +309,6 @@ async def get_test_tables(db: Session = Depends(get_db)) -> List[Dict[str, Any]]
                     "name": table_name,
                     "description": f"{table_name.capitalize()} table"
                 })
-        
-        # Add mock tables for development
-        dev_tables = [
-            {"id": 101, "name": "customers", "description": "Customer information (dev)"},
-            {"id": 102, "name": "orders", "description": "Order details (dev)"},
-            {"id": 103, "name": "products", "description": "Product catalog (dev)"}
-        ]
-        
-        # Add dev tables that don't exist in the database
-        existing_names = [table["name"] for table in tables]
-        for dev_table in dev_tables:
-            if dev_table["name"] not in existing_names:
-                tables.append(dev_table)
         
         print(f"Final tables list: {[t['name'] for t in tables]}")
         return tables

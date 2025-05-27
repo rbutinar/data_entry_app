@@ -27,6 +27,78 @@ A React-based front-end web app that connects to a SQL database (Azure SQL or Po
 - Token validation via python-jose
 - Azure SQL (Fabric) for persistent storage
 
+---
+
+## Backend API Endpoints & Usage
+
+### 1. List Tables
+- **Endpoint:** `GET /tables/`
+- **Description:** Returns all tables accessible to the user.
+- **Example:**
+  ```sh
+  curl -L -X GET "http://localhost:8000/tables/"
+  ```
+
+### 2. Get Table Data (Read)
+- **Endpoint:** `GET /data/{table_name}`
+- **Description:** Returns data from a table, supports pagination and filtering.
+- **Example:**
+  ```sh
+  curl -L -X GET "http://localhost:8000/data/tabella_1?page=1&page_size=10"
+  ```
+
+### 3. Insert Row (Create)
+- **Endpoint:** `POST /data/{table_name}`
+- **Description:** Insert a new row into the specified table.
+- **Example:**
+  ```sh
+  curl -L -X POST "http://localhost:8000/data/tabella_1" \
+    -H "Content-Type: application/json" \
+    -d '{"column1": "value1", "column2": "value2"}'
+  ```
+
+### 4. Update Row (Update)
+- **Endpoint:** `PATCH /data/{table_name}/{row_id}`
+- **Description:** Update a specific row in the table.
+- **Example:**
+  ```sh
+  curl -L -X PATCH "http://localhost:8000/data/tabella_1/1" \
+    -H "Content-Type: application/json" \
+    -d '{"column1": "new_value"}'
+  ```
+
+### 5. Delete Row (Delete)
+- **Endpoint:** `DELETE /data/{table_name}/{row_id}`
+- **Description:** Delete a specific row from the table.
+- **Example:**
+  ```sh
+  curl -L -X DELETE "http://localhost:8000/data/tabella_1/1"
+  ```
+
+### 6. Get Table Metadata
+- **Endpoint:** `GET /tables/{table_name}`
+- **Description:** Returns metadata for a specific table.
+- **Example:**
+  ```sh
+  curl -L -X GET "http://localhost:8000/tables/tabella_1"
+  ```
+
+---
+
+### Authentication
+If authentication is enabled, add your Bearer token to the curl command:
+```sh
+-H "Authorization: Bearer <your_token>"
+```
+
+---
+
+### Notes
+- Replace `tabella_1` and column names with actual table/column names as needed.
+- Use the `/tables/` endpoint to discover available tables.
+- Use `-L` with curl to follow redirects (for endpoints with trailing slashes).
+- All endpoints return JSON responses.
+
 ## Project Structure
 
 ```
