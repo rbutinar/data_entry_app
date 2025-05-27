@@ -1,2 +1,18 @@
 .env
 venv
+
+# Editor/IDE
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Python __pycache__ and .pyc in backend
+backend/app/__pycache__/
+backend/app/auth/__pycache__/
+backend/app/routers/__pycache__/
+backend/app/routers/*.pyc
+backend/app/auth/*.pyc
+backend/__pycache__/
+.idea/
+
