@@ -1,5 +1,17 @@
 # PowerApps-style React Frontend with SQL Editing
 
+## Known Issues
+
+1. **Primary Key Detection (Backend)**: 
+   - The backend has difficulty correctly identifying primary keys in some Azure SQL tables
+   - Current workaround uses INFORMATION_SCHEMA queries with the 'dbo' schema
+   - For tables with non-standard primary keys, manual configuration may be required
+
+2. **Edit/Delete Functionality (Frontend)**:
+   - Edit and delete buttons may be disabled for some rows even when primary keys are correctly detected
+   - Issue may be related to case sensitivity or data format mismatches between frontend and backend
+   - Debug logging has been added to help diagnose these issues
+
 A React-based front-end web app that connects to a SQL database (Azure SQL or PostgreSQL) and allows authenticated users to browse available tables, view and edit data in a spreadsheet-like table, apply filters, and update individual cells or entire records.
 
 ## Features
