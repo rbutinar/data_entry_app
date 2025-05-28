@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from backend.app.auth.token import get_current_user
 from backend.database.connection import get_db
 from backend.models.models import User, Table, UserTableAccess
-from sqlalchemy import select, join
+from sqlalchemy import select, join, text
 from typing import List, Dict, Any
 
 # Removed get_mock_table_columns; only real database tables are supported.
@@ -36,7 +36,7 @@ async def get_accessible_tables(
         if table_name not in ['alembic_version']:
             try:
                 print("Using INFORMATION_SCHEMA to detect primary keys...")
-                pk_query = """
+                pk_query = text("""
                 SELECT 
                     kcu.COLUMN_NAME
                 FROM 
@@ -46,10 +46,10 @@ async def get_accessible_tables(
                     ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
                 WHERE 
                     tc.TABLE_SCHEMA = 'dbo'          -- Using default schema
-                    AND tc.TABLE_NAME = ?            -- Table name parameter
+                    AND tc.TABLE_NAME = :table_name  -- Table name parameter
                     AND tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
-                """
-                result = db.execute(pk_query, (table_name,)).fetchall()
+                """)
+                result = db.execute(pk_query, {"table_name": table_name}).fetchall()
                 tables.append(Table(
                     id=idx + 1,
                     name=table_name,
@@ -107,7 +107,8 @@ async def get_table_metadata(
     
     try:
         print("Using INFORMATION_SCHEMA to detect primary keys...")
-        pk_query = """
+        # Use a simplified query to get primary keys
+        pk_query = text("""
         SELECT 
             kcu.COLUMN_NAME
         FROM 
@@ -116,11 +117,12 @@ async def get_table_metadata(
             INFORMATION_SCHEMA.KEY_COLUMN_USAGE AS kcu
             ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
         WHERE 
-            tc.TABLE_SCHEMA = 'dbo'          -- Using default schema
-            AND tc.TABLE_NAME = ?            -- Table name parameter
+            tc.TABLE_SCHEMA = 'dbo'
+            AND tc.TABLE_NAME = :table_name
             AND tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
-        """
-        result = db.execute(pk_query, (table_name,)).fetchall()
+        """)
+        result = db.execute(pk_query, {"table_name": table_name}).fetchall()
+        print(f"Primary key SQL query result for table '{table_name}': {result}")
         
         if result:
             for row in result:
@@ -138,20 +140,9 @@ async def get_table_metadata(
                 primary_key_columns.add(column['name'])
                 print(f"Found primary key from SQLAlchemy metadata: {column['name']}")
     
-    # KNOWN TABLES: If still no primary key detected, use known information for specific tables
+    # No hardcoded fallback - rely only on database schema information
     if not primary_key_columns:
-        known_tables = {
-            'tabella_1': 'id',
-            'tabella_2': 'id',
-            'tabella_3': 'id',
-            'orders': 'id',
-            'users': 'id'
-        }
-        
-        if table_name in known_tables:
-            pk_name = known_tables[table_name]
-            print(f"Using known primary key '{pk_name}' for table '{table_name}'")
-            primary_key_columns.add(pk_name)
+        print(f"No primary key detected for table '{table_name}' - will not use any fallback")
     
     print(f"Primary key columns detected: {primary_key_columns}")
     
