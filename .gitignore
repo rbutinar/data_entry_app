@@ -1,5 +1,13 @@
 .env
-venv
+venv/
+.DS_Store
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
 
 # Editor/IDE
 *.swp
@@ -7,12 +15,19 @@ venv
 .vscode/
 .idea/
 
-# Python __pycache__ and .pyc in backend
+# Frontend
+frontend/node_modules/
+frontend/build/
+frontend/.DS_Store
+
+# Mac system files
+.DS_Store
+
+# Legacy (still ignore just in case)
 backend/app/__pycache__/
 backend/app/auth/__pycache__/
 backend/app/routers/__pycache__/
 backend/app/routers/*.pyc
 backend/app/auth/*.pyc
 backend/__pycache__/
-.idea/
 
