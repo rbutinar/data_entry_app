@@ -48,6 +48,7 @@ const TableView = () => {
     .filter(key => key !== '_tempId')
     .map((key) => {
       return columnHelper.accessor(key, {
+        id: key,
         header: key,
         cell: (info) => {
           const value = info.getValue();
