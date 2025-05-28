@@ -39,7 +39,119 @@ const TableView = () => {
   const [editValues, setEditValues] = useState({});
   const [filterColumn, setFilterColumn] = useState('');
   const [filterValue, setFilterValue] = useState('');
-  const [columns, setColumns] = useState([]);
+  const columns = React.useMemo(() => {
+  if (!data || data.length === 0) return [];
+  const firstRow = data[0];
+  const columnHelper = createColumnHelper();
+
+  const tableColumns = Object.keys(firstRow)
+    .filter(key => key !== '_tempId')
+    .map((key) => {
+      return columnHelper.accessor(key, {
+        header: key,
+        cell: (info) => {
+          const value = info.getValue();
+          const rowIndex = info.row.index;
+          const rowData = data[rowIndex];
+          const columnId = info.column.id;
+
+          if (editingRow === rowIndex) {
+            return (
+              <input
+                type="text"
+                value={editValues[columnId] !== undefined ? editValues[columnId] : (value !== null && value !== undefined ? String(value) : '')}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setEditValues(prev => ({
+                    ...prev,
+                    [columnId]: newValue
+                  }));
+                }}
+                className="w-full p-1 border border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
+                autoFocus={columnId === Object.keys(rowData).filter(k => k !== 'id' && k !== '_tempId')[0]}
+              />
+            );
+          }
+
+          return (
+            <div className="p-1">
+              {value !== null && value !== undefined ? String(value) : ''}
+            </div>
+          );
+        },
+      });
+    });
+
+  // Add actions column
+  tableColumns.push(
+    columnHelper.display({
+      id: 'actions',
+      header: 'Actions',
+      cell: (info) => {
+        const rowIndex = info.row.index;
+        const rowData = data[rowIndex];
+        const rowId = rowData.id !== undefined ? rowData.id : rowData._tempId;
+
+        if (!rowData) {
+          return (
+            <div className="flex items-center space-x-2">
+              <button
+                className="p-1 text-blue-600 hover:text-blue-800"
+                title="Edit Row"
+                disabled
+              >
+                <PencilIcon className="h-5 w-5 opacity-50" />
+              </button>
+            </div>
+          );
+        }
+
+        if (editingRow === rowIndex) {
+          return (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handleSaveEdit(rowIndex, rowId)}
+                className="p-1 text-green-600 hover:text-green-800"
+                title="Save Changes"
+              >
+                <CheckIcon className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => handleCancelEdit()}
+                className="p-1 text-red-600 hover:text-red-800"
+                title="Cancel Edit"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+          );
+        }
+
+        return (
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => handleEditRow(rowIndex, rowData)}
+              className="p-1 text-blue-600 hover:text-blue-800"
+              title="Edit Row"
+            >
+              <PencilIcon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => handleDeleteRow(rowId)}
+              className="p-1 text-red-600 hover:text-red-800"
+              title="Delete Row"
+            >
+              <TrashIcon className="h-5 w-5" />
+            </button>
+          </div>
+        );
+      },
+    })
+  );
+
+  return tableColumns;
+}, [data, editingRow, editValues]);
+
   const [fieldNames, setFieldNames] = useState([]);
   const [allFields, setAllFields] = useState([]); // Added to include ID field
   const [showAddForm, setShowAddForm] = useState(false);
@@ -207,7 +319,7 @@ const TableView = () => {
           })
         );
         
-        setColumns(tableColumns);
+        // setColumns(tableColumns);
       }
     } catch (err) {
       console.error('Error fetching table data:', err);
