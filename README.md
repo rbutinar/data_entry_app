@@ -7,7 +7,11 @@
 - The app now supports robust row and cell editing, filtering, adding, and deleting records.
 - The filter menu is always populated with the correct column names.
 - All core features are stable and work as expected for end users and admins.
+- Dynamic primary key handling supports tables with different primary key column names and both auto-incrementing and non-auto-incrementing primary keys.
+- Improved cell editing experience with proper focus management.
 - No known blocking issues remain for standard usage.
+
+> **Note:** Tables without a primary key are not currently supported.
 
 A React-based front-end web app that connects to a SQL database (Azure SQL or PostgreSQL) and allows authenticated users to browse available tables, view and edit data in a spreadsheet-like table, apply filters, and update individual cells or entire records.
 
@@ -71,38 +75,44 @@ A React-based front-end web app that connects to a SQL database (Azure SQL or Po
 
 ### 3. Insert Row (Create)
 - **Endpoint:** `POST /data/{table_name}`
-- **Description:** Insert a new row into the specified table.
+- **Description:** Insert a new row into the specified table. Supports dynamic primary key columns.
+- **Parameters:**
+  - `pk` (optional): Specify the primary key column name if different from 'id'
 - **Example:**
   ```sh
-  curl -L -X POST "http://localhost:8000/data/tabella_1" \
+  curl -L -X POST "http://localhost:8000/data/tabella_1?pk=newid" \
     -H "Content-Type: application/json" \
-    -d '{"column1": "value1", "column2": "value2"}'
+    -d '{"newid": "value1", "column2": "value2"}'
   ```
 
 ### 4. Update Row (Update)
 - **Endpoint:** `PATCH /data/{table_name}/{row_id}`
-- **Description:** Update a specific row in the table.
+- **Description:** Update a specific row in the table. Supports dynamic primary key columns.
+- **Parameters:**
+  - `pk` (optional): Specify the primary key column name if different from 'id'
 - **Example:**
   ```sh
-  curl -L -X PATCH "http://localhost:8000/data/tabella_1/1" \
+  curl -L -X PATCH "http://localhost:8000/data/tabella_1/1?pk=newid" \
     -H "Content-Type: application/json" \
     -d '{"column1": "new_value"}'
   ```
 
 ### 5. Delete Row (Delete)
 - **Endpoint:** `DELETE /data/{table_name}/{row_id}`
-- **Description:** Delete a specific row from the table.
+- **Description:** Delete a specific row from the table. Supports dynamic primary key columns.
+- **Parameters:**
+  - `pk` (optional): Specify the primary key column name if different from 'id'
 - **Example:**
   ```sh
-  curl -L -X DELETE "http://localhost:8000/data/tabella_1/1"
+  curl -L -X DELETE "http://localhost:8000/data/tabella_1/1?pk=newid"
   ```
 
 ### 6. Get Table Metadata
-- **Endpoint:** `GET /tables/{table_name}`
-- **Description:** Returns metadata for a specific table.
+- **Endpoint:** `GET /metadata/{table_name}`
+- **Description:** Returns metadata for a specific table including column details, primary key column name, and whether the primary key is auto-incrementing.
 - **Example:**
   ```sh
-  curl -L -X GET "http://localhost:8000/tables/tabella_1"
+  curl -L -X GET "http://localhost:8000/metadata/tabella_1"
   ```
 
 ---
@@ -193,10 +203,13 @@ data_entry_app/
    ```
 
 3. Start the FastAPI server:
+   
+   From the project root (`c:\codebase\data_entry_app`), run:
+   ```sh
+   uvicorn backend.app.main:app --reload --port 8000
    ```
-   cd backend
-   uvicorn app.main:app --reload --port 8000
-   ```
+   
+   > **Note:** Do NOT run `uvicorn app.main:app` from inside the backend directory, as the code expects to be run from the project root.
 
 ### Frontend Setup
 

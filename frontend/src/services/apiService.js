@@ -6,6 +6,48 @@ import { getAccessToken } from './authService';
  */
 export const apiService = {
   /**
+   * Get metadata for a specific table including primary key information
+   * @param {Object} instance - MSAL instance
+   * @param {Object} account - User account
+   * @param {string} tableName - Name of the table
+   * @returns {Promise<Object>} Table metadata including primary key information
+   */
+  async getTableMetadata(instance, account, tableName) {
+    try {
+      // First try the test endpoint without authentication
+      console.log(`Trying test endpoint for table metadata: ${tableName}`);
+      const testUrl = `${apiConfig.baseUrl}/debug/test-table-metadata/${tableName}`;
+      console.log(`Test URL: ${testUrl}`);
+      
+      const testResponse = await fetch(testUrl);
+      
+      if (testResponse.ok) {
+        console.log(`Test endpoint successful for table metadata: ${tableName}`);
+        return testResponse.json();
+      }
+      
+      // If test endpoint fails, try the authenticated endpoint
+      console.log(`Test endpoint failed, trying authenticated endpoint for table metadata: ${tableName}`);
+      const accessToken = await getAccessToken(instance, account);
+      
+      const response = await fetch(`${apiConfig.baseUrl}${apiConfig.endpoints.tables}/metadata/${tableName}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error fetching table metadata: ${response.statusText}`);
+      }
+      
+      return response.json();
+    } catch (error) {
+      console.error(`Error in getTableMetadata: ${error.message}`);
+      throw error;
+    }
+  },
+
+  /**
    * Get all tables the user has access to
    * @param {Object} instance - MSAL instance
    * @param {Object} account - User account
@@ -90,13 +132,14 @@ export const apiService = {
    * @param {string} tableName - Name of the table
    * @param {number} rowId - ID of the row to update
    * @param {Object} updates - Object containing column-value pairs to update
+   * @param {string} primaryKeyCol - Name of the primary key column
    * @returns {Promise<Object>} Response data
    */
-  async updateRow(instance, account, tableName, rowId, updates) {
+  async updateRow(instance, account, tableName, rowId, updates, primaryKeyCol = 'id') {
     try {
       // First try the test endpoint without authentication
       console.log(`Trying test endpoint for updating row in table: ${tableName}`);
-      const testUrl = `${apiConfig.baseUrl}/debug/test-table-data/${tableName}/${rowId}`;
+      const testUrl = `${apiConfig.baseUrl}/debug/test-table-data/${tableName}/${rowId}?pk=${primaryKeyCol}`;
       console.log(`Test URL: ${testUrl}`);
       
       const testResponse = await fetch(testUrl, {
@@ -116,7 +159,7 @@ export const apiService = {
       console.log(`Test endpoint failed, trying authenticated endpoint for updating row in table: ${tableName}`);
       const accessToken = await getAccessToken(instance, account);
       
-      const response = await fetch(`${apiConfig.baseUrl}${apiConfig.endpoints.data}/${tableName}/${rowId}`, {
+      const response = await fetch(`${apiConfig.baseUrl}${apiConfig.endpoints.data}/${tableName}/${rowId}?pk=${primaryKeyCol}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -142,13 +185,19 @@ export const apiService = {
    * @param {Object} account - User account
    * @param {string} tableName - Name of the table
    * @param {Object} data - Object containing column-value pairs for the new row
+   * @param {string} primaryKeyCol - Name of the primary key column
    * @returns {Promise<Object>} Response data
    */
-  async insertRow(instance, account, tableName, data) {
+  async insertRow(instance, account, tableName, data, primaryKeyCol = 'id') {
     try {
+      console.log(`=== INSERT ROW ===`);
+      console.log(`Table: ${tableName}`);
+      console.log(`Primary Key Column: ${primaryKeyCol}`);
+      console.log(`Data to insert:`, data);
+      
       // First try the test endpoint without authentication
       console.log(`Trying test endpoint for inserting row in table: ${tableName}`);
-      const testUrl = `${apiConfig.baseUrl}/debug/test-table-data/${tableName}`;
+      const testUrl = `${apiConfig.baseUrl}/debug/test-table-data/${tableName}?pk=${primaryKeyCol}`;
       console.log(`Test URL: ${testUrl}`);
       
       const testResponse = await fetch(testUrl, {
@@ -159,16 +208,20 @@ export const apiService = {
         body: JSON.stringify(data)
       });
       
+      console.log(`Test endpoint response status: ${testResponse.status} ${testResponse.statusText}`);
+      
       if (testResponse.ok) {
         console.log(`Test endpoint successful for inserting row in table: ${tableName}`);
-        return testResponse.json();
+        const responseData = await testResponse.json();
+        console.log(`Test endpoint response data:`, responseData);
+        return responseData;
       }
       
       // If test endpoint fails, try the authenticated endpoint
       console.log(`Test endpoint failed, trying authenticated endpoint for inserting row in table: ${tableName}`);
       const accessToken = await getAccessToken(instance, account);
       
-      const response = await fetch(`${apiConfig.baseUrl}${apiConfig.endpoints.data}/${tableName}`, {
+      const response = await fetch(`${apiConfig.baseUrl}${apiConfig.endpoints.data}/${tableName}?pk=${primaryKeyCol}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -177,11 +230,15 @@ export const apiService = {
         body: JSON.stringify(data)
       });
       
+      console.log(`Authenticated endpoint response status: ${response.status} ${response.statusText}`);
+      
       if (!response.ok) {
         throw new Error(`Error inserting row: ${response.statusText}`);
       }
       
-      return response.json();
+      const responseData = await response.json();
+      console.log(`Authenticated endpoint response data:`, responseData);
+      return responseData;
     } catch (error) {
       console.error(`Error in insertRow: ${error.message}`);
       throw error;
@@ -193,14 +250,15 @@ export const apiService = {
    * @param {Object} instance - MSAL instance
    * @param {Object} account - User account
    * @param {string} tableName - Name of the table
-   * @param {number} rowId - ID of the row to delete
+   * @param {number|string} rowId - ID of the row to delete
+   * @param {string} primaryKeyCol - Name of the primary key column
    * @returns {Promise<Object>} Response data
    */
-  async deleteRow(instance, account, tableName, rowId) {
+  async deleteRow(instance, account, tableName, rowId, primaryKeyCol = 'id') {
     try {
       // First try the test endpoint without authentication
       console.log(`Trying test endpoint for deleting row in table: ${tableName}`);
-      const testUrl = `${apiConfig.baseUrl}/debug/test-table-data/${tableName}/${rowId}`;
+      const testUrl = `${apiConfig.baseUrl}/debug/test-table-data/${tableName}/${rowId}?pk=${primaryKeyCol}`;
       console.log(`Test URL: ${testUrl}`);
       
       const testResponse = await fetch(testUrl, {
@@ -216,7 +274,7 @@ export const apiService = {
       console.log(`Test endpoint failed, trying authenticated endpoint for deleting row in table: ${tableName}`);
       const accessToken = await getAccessToken(instance, account);
       
-      const response = await fetch(`${apiConfig.baseUrl}${apiConfig.endpoints.data}/${tableName}/${rowId}`, {
+      const response = await fetch(`${apiConfig.baseUrl}${apiConfig.endpoints.data}/${tableName}/${rowId}?pk=${primaryKeyCol}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${accessToken}`

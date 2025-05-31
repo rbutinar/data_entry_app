@@ -4,14 +4,86 @@ from sqlalchemy import inspect, text
 from backend.database.connection import get_db, engine
 from backend.models.models import User, Table, UserTableAccess
 from typing import List, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, status
+import pyodbc
 
 router = APIRouter()
+
+def is_identity_column(connection, table_name, column_name):
+    """
+    Check if a column is an identity (auto-incrementing) column in SQL Server.
+    """
+    try:
+        cursor = connection.connection.cursor()
+        # This SQL query checks if a column has the IDENTITY property
+        query = """
+        SELECT 
+            COLUMNPROPERTY(OBJECT_ID(?), ?, 'IsIdentity') AS is_identity
+        """
+        cursor.execute(query, (table_name, column_name))
+        row = cursor.fetchone()
+        if row and row[0] == 1:
+            return True
+        return False
+    except Exception as e:
+        print(f"Error checking identity column: {e}")
+        return False
+
+@router.get("/test-table-metadata/{table_name}")
+async def get_test_table_metadata(table_name: str, db: Session = Depends(get_db)):
+    """
+    Test endpoint to get table metadata including primary key information without authentication.
+    """
+    try:
+        print(f"\n\n=== GET TEST TABLE METADATA ===\nTable: {table_name}\n===========================")
+        
+        # Check if the table exists in the database schema
+        inspector = inspect(db.get_bind())
+        db_table_names = inspector.get_table_names()
+        
+        if table_name not in db_table_names:
+            return {"success": False, "error": f"Table '{table_name}' not found in database"}
+        
+        # Get table columns
+        columns = inspector.get_columns(table_name)
+        column_info = [{
+            "name": col["name"],
+            "type": str(col["type"]),
+            "nullable": col["nullable"]
+        } for col in columns]
+        
+        # Get primary key information
+        pk_constraint = inspector.get_pk_constraint(table_name)
+        primary_key = pk_constraint["constrained_columns"][0] if pk_constraint and pk_constraint["constrained_columns"] else "id"
+        
+        print(f"Primary key for table {table_name}: {primary_key}")
+        
+        # Check if the primary key is auto-incrementing
+        is_auto_increment = False
+        try:
+            connection = db.connection()
+            is_auto_increment = is_identity_column(connection, table_name, primary_key)
+            print(f"Is primary key auto-incrementing: {is_auto_increment}")
+        except Exception as e:
+            print(f"Error checking if primary key is auto-incrementing: {e}")
+        
+        return {
+            "success": True,
+            "table_name": table_name,
+            "columns": column_info,
+            "primary_key": primary_key,
+            "is_auto_increment": is_auto_increment
+        }
+    except Exception as e:
+        print(f"Error getting table metadata: {str(e)}")
+        return {"success": False, "error": str(e)}
 
 @router.patch("/test-table-data/{table_name}/{row_id}")
 async def update_test_table_row(
     table_name: str,
     row_id: int,
     updates: Dict[str, Any],
+    pk: str = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -45,8 +117,12 @@ async def update_test_table_row(
             # Add the row_id parameter at the end
             values.append(row_id)
             
+            # Use provided primary key column name if available, otherwise use 'id'
+            primary_key = pk if pk else 'id'
+            print(f"Using primary key column: {primary_key}")
+            
             set_clause = ", ".join(set_parts)
-            query = f"UPDATE {table_name} SET {set_clause} WHERE id = ?"
+            query = f"UPDATE {table_name} SET {set_clause} WHERE {primary_key} = ?"
             print(f"Executing query: {query} with values: {values}")
             
             try:
@@ -77,6 +153,7 @@ async def update_test_table_row(
 async def insert_test_table_row(
     table_name: str,
     data: Dict[str, Any],
+    pk: str = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -106,32 +183,78 @@ async def insert_test_table_row(
             
             # Use direct SQL execution with pyodbc
             try:
-                # For SQL Server, we use this format to get back the inserted ID
-                query = f"INSERT INTO {table_name} ({columns}) OUTPUT INSERTED.id VALUES ({placeholders})"
-                print(f"Executing query: {query} with values: {values}")
+                # Use provided primary key column name if available, otherwise use 'id'
+                primary_key = pk if pk else 'id'
+                print(f"Using primary key column: {primary_key}")
                 
-                cursor.execute(query, values)
-                row = cursor.fetchone()
-                if row:
-                    new_id = row[0]
-                else:
-                    new_id = None
+                try:
+                    # For SQL Server, we use this format to get back the inserted ID
+                    query = f"INSERT INTO {table_name} ({columns}) OUTPUT INSERTED.{primary_key} VALUES ({placeholders})"
+                    print(f"Executing query: {query} with values: {values}")
                     
-                # Commit the transaction
-                connection.commit()
-                
-                if new_id is not None:
-                    return {
-                        "success": True, 
-                        "id": new_id, 
-                        "message": f"Row inserted successfully into table {table_name}"
+                    cursor.execute(query, values)
+                    row = cursor.fetchone()
+                    if row:
+                        new_id = row[0]
+                    else:
+                        new_id = None
+                        
+                    # Commit the transaction
+                    connection.commit()
+                    
+                    if new_id is not None:
+                        # Return the inserted row data with the primary key
+                        return_data = {
+                            "success": True,
+                            primary_key: new_id,
+                            "message": f"Row inserted successfully into table {table_name}"
+                        }
+                        
+                        # Add all the original data to the response
+                        for key, value in data.items():
+                            if key != primary_key:  # Don't override the primary key
+                                return_data[key] = value
+                                
+                        return return_data
+                    else:
+                        # If we couldn't get the new ID, return the original data
+                        # This helps with non-auto-incrementing primary keys
+                        return_data = {
+                            "success": True,
+                            "message": f"Row inserted successfully into table {table_name} but ID not returned"
+                        }
+                        
+                        # Add all the original data to the response
+                        for key, value in data.items():
+                            return_data[key] = value
+                            
+                        return return_data
+                except Exception as output_error:
+                    # If OUTPUT INSERTED fails (e.g., for tables without auto-increment),
+                    # try a simpler insert and then select the inserted data
+                    print(f"OUTPUT INSERTED failed: {output_error}, trying alternate approach")
+                    
+                    # Rollback the failed transaction
+                    connection.rollback()
+                    
+                    # Try a simple insert without OUTPUT
+                    simple_query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
+                    print(f"Executing simple query: {simple_query} with values: {values}")
+                    
+                    cursor.execute(simple_query, values)
+                    connection.commit()
+                    
+                    # Return the original data as the response
+                    return_data = {
+                        "success": True,
+                        "message": f"Row inserted successfully into table {table_name} using alternate method"
                     }
-                else:
-                    return {
-                        "success": True, 
-                        "id": 9999, 
-                        "message": f"Row inserted successfully into table {table_name} but ID not returned"
-                    }
+                    
+                    # Add all the original data to the response
+                    for key, value in data.items():
+                        return_data[key] = value
+                        
+                    return return_data
                     
             except Exception as sql_error:
                 # Roll back on error
@@ -160,6 +283,7 @@ async def insert_test_table_row(
 async def delete_test_table_row(
     table_name: str,
     row_id: int,
+    pk: str = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -182,8 +306,12 @@ async def delete_test_table_row(
             connection = db.connection()
             cursor = connection.connection.cursor()
             
+            # Use provided primary key column name if available, otherwise use 'id'
+            primary_key = pk if pk else 'id'
+            print(f"Using primary key column: {primary_key}")
+            
             # Build the delete query using parameterized statements
-            query = f"DELETE FROM {table_name} WHERE id = ?"
+            query = f"DELETE FROM {table_name} WHERE {primary_key} = ?"
             print(f"Executing query: {query} with values: [{row_id}]")
             
             try:

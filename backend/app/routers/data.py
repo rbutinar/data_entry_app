@@ -5,10 +5,65 @@ from typing import Dict, Any, Optional, List
 from backend.app.auth.token import get_current_user
 from backend.database.connection import get_db, engine
 from backend.models.models import User, Table, UserTableAccess
+from backend.app.routers.debug import is_identity_column
 
 router = APIRouter()
 
 # Removed get_mock_data; only real database tables are supported.
+
+@router.get("/metadata/{table_name}")
+async def get_table_metadata(
+    table_name: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get metadata for a specific table including column information and primary key.
+    """
+    # Check if user has access to the table
+    await check_table_access(table_name, current_user["id"], db)
+    
+    try:
+        # Get table columns and their types
+        from sqlalchemy import inspect
+        inspector = inspect(db.get_bind())
+        
+        # Get column information
+        columns = inspector.get_columns(table_name)
+        column_info = [{
+            "name": column["name"],
+            "type": str(column["type"]),
+            "nullable": column["nullable"]
+        } for column in columns]
+        
+        # Get primary key information
+        pk_constraint = inspector.get_pk_constraint(table_name)
+        primary_key = pk_constraint["constrained_columns"][0] if pk_constraint and pk_constraint["constrained_columns"] else "id"
+        
+        print(f"Primary key for table {table_name}: {primary_key}")
+        
+        # Check if the primary key is auto-incrementing
+        is_auto_increment = False
+        try:
+            connection = db.connection()
+            is_auto_increment = is_identity_column(connection, table_name, primary_key)
+            print(f"Is primary key auto-incrementing: {is_auto_increment}")
+        except Exception as e:
+            print(f"Error checking if primary key is auto-incrementing: {e}")
+        
+        return {
+            "success": True,
+            "table_name": table_name,
+            "columns": column_info,
+            "primary_key": primary_key,
+            "is_auto_increment": is_auto_increment
+        }
+    except Exception as e:
+        print(f"Error getting table metadata: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting table metadata: {str(e)}"
+        )
 
 async def check_table_access(
     table_name: str, 
@@ -134,6 +189,7 @@ async def update_row(
     table_name: str,
     row_id: int,
     updates: Dict[str, Any],
+    pk: str = None,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -149,13 +205,22 @@ async def update_row(
         connection = db.connection()
         cursor = connection.connection.cursor()
 
-        # Dynamically detect the primary key column for the table
-        from sqlalchemy import inspect
-        inspector = inspect(db.get_bind())
-        pk_cols = inspector.get_pk_constraint(table_name, schema="dbo")
-        if not pk_cols or not pk_cols['constrained_columns']:
-            raise HTTPException(status_code=500, detail=f"Table {table_name} has no primary key.")
-        pk_col = pk_cols['constrained_columns'][0]
+        # Use provided primary key column name if available, otherwise detect it dynamically
+        if pk:
+            print(f"[DEBUG] Using provided primary key column: {pk}")
+            pk_col = pk
+        else:
+            # Dynamically detect the primary key column for the table
+            from sqlalchemy import inspect
+            print("[DEBUG] Inspecting table for primary key...")
+            inspector = inspect(db.get_bind())
+            pk_cols = inspector.get_pk_constraint(table_name, schema="dbo")
+            print(f"[DEBUG] PK constraint info: {pk_cols}")
+            if not pk_cols or not pk_cols['constrained_columns']:
+                print(f"[ERROR] Table {table_name} has no primary key.")
+                raise HTTPException(status_code=500, detail=f"Table {table_name} has no primary key.")
+            pk_col = pk_cols['constrained_columns'][0]
+            print(f"[DEBUG] Using detected primary key column: {pk_col}")
 
         # Build the update query using parameterized statements
         set_parts = []
@@ -205,6 +270,7 @@ async def update_row(
 async def insert_row(
     table_name: str,
     data: Dict[str, Any],
+    pk: str = None,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -220,14 +286,23 @@ async def insert_row(
         connection = db.connection()
         cursor = connection.connection.cursor()
 
-        # Dynamically detect the primary key column for the table
-        from sqlalchemy import inspect
-        inspector = inspect(db.get_bind())
-        pk_cols = inspector.get_pk_constraint(table_name, schema="dbo")
-        if not pk_cols or not pk_cols['constrained_columns']:
-            pk_col = None
+        # Use provided primary key column name if available, otherwise detect it dynamically
+        if pk:
+            print(f"[DEBUG] Using provided primary key column: {pk}")
+            pk_col = pk
         else:
-            pk_col = pk_cols['constrained_columns'][0]
+            # Dynamically detect the primary key column for the table
+            from sqlalchemy import inspect
+            print("[DEBUG] Inspecting table for primary key...")
+            inspector = inspect(db.get_bind())
+            pk_cols = inspector.get_pk_constraint(table_name, schema="dbo")
+            print(f"[DEBUG] PK constraint info: {pk_cols}")
+            if not pk_cols or not pk_cols['constrained_columns']:
+                pk_col = None
+                print(f"[DEBUG] No primary key found for table {table_name}")
+            else:
+                pk_col = pk_cols['constrained_columns'][0]
+                print(f"[DEBUG] Using detected primary key column: {pk_col}")
 
         # Build the insert query using parameterized statements for security
         columns = ", ".join(data.keys())
@@ -236,26 +311,82 @@ async def insert_row(
 
         # Use direct SQL execution with pyodbc
         try:
-            # For SQL Server, we use this format to get back the inserted PK (if exists)
             if pk_col:
-                query = f"INSERT INTO {table_name} ({columns}) OUTPUT INSERTED.{pk_col} VALUES ({placeholders})"
+                try:
+                    # For SQL Server, we use this format to get back the inserted PK (if exists)
+                    query = f"INSERT INTO {table_name} ({columns}) OUTPUT INSERTED.{pk_col} VALUES ({placeholders})"
+                    print(f"Executing query: {query} with values: {values}")
+
+                    cursor.execute(query, values)
+                    row = cursor.fetchone()
+                    new_id = row[0] if row else None
+                    
+                    # Commit the transaction
+                    connection.commit()
+                    
+                    if new_id is not None:
+                        # Return the inserted row data with the primary key
+                        return_data = {
+                            "message": "Row inserted successfully",
+                            pk_col: new_id
+                        }
+                        
+                        # Add all the original data to the response
+                        for key, value in data.items():
+                            if key != pk_col:  # Don't override the primary key
+                                return_data[key] = value
+                                
+                        return return_data
+                    else:
+                        # Fallback to simple insert if OUTPUT INSERTED didn't return an ID
+                        print("OUTPUT INSERTED didn't return an ID, using original data")
+                        return_data = {"message": "Row inserted successfully"}
+                        
+                        # Add all the original data to the response
+                        for key, value in data.items():
+                            return_data[key] = value
+                            
+                        return return_data
+                        
+                except Exception as output_error:
+                    # If OUTPUT INSERTED fails (e.g., for tables without auto-increment),
+                    # try a simpler insert and then select the inserted data
+                    print(f"OUTPUT INSERTED failed: {output_error}, trying alternate approach")
+                    
+                    # Rollback the failed transaction
+                    connection.rollback()
+                    
+                    # Try a simple insert without OUTPUT
+                    simple_query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
+                    print(f"Executing simple query: {simple_query} with values: {values}")
+                    
+                    cursor.execute(simple_query, values)
+                    connection.commit()
+                    
+                    # Return the original data as the response
+                    return_data = {"message": "Row inserted successfully using alternate method"}
+                    
+                    # Add all the original data to the response
+                    for key, value in data.items():
+                        return_data[key] = value
+                        
+                    return return_data
             else:
+                # No primary key column, use simple insert
                 query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
-            print(f"Executing query: {query} with values: {values}")
+                print(f"Executing query: {query} with values: {values}")
 
-            cursor.execute(query, values)
-            new_id = None
-            if pk_col:
-                row = cursor.fetchone()
-                if row:
-                    new_id = row[0]
-            # Commit the transaction
-            connection.commit()
-
-            if new_id is not None:
-                return {"message": "Row inserted successfully", pk_col: new_id}
-            else:
-                return {"message": "Row inserted successfully"}
+                cursor.execute(query, values)
+                connection.commit()
+                
+                # Return the original data as the response
+                return_data = {"message": "Row inserted successfully"}
+                
+                # Add all the original data to the response
+                for key, value in data.items():
+                    return_data[key] = value
+                    
+                return return_data
 
         except Exception as sql_error:
             # Roll back on error
@@ -279,6 +410,7 @@ async def insert_row(
 async def delete_row(
     table_name: str,
     row_id: int,
+    pk: str = None,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -297,17 +429,22 @@ async def delete_row(
         cursor = connection.connection.cursor()
         print("[DEBUG] Raw connection and cursor acquired.")
         
-        # Dynamically detect the primary key column for the table
-        from sqlalchemy import inspect
-        print("[DEBUG] Inspecting table for primary key...")
-        inspector = inspect(db.get_bind())
-        pk_cols = inspector.get_pk_constraint(table_name, schema="dbo")
-        print(f"[DEBUG] PK constraint info: {pk_cols}")
-        if not pk_cols or not pk_cols['constrained_columns']:
-            print(f"[ERROR] Table {table_name} has no primary key.")
-            raise HTTPException(status_code=500, detail=f"Table {table_name} has no primary key.")
-        pk_col = pk_cols['constrained_columns'][0]
-        print(f"[DEBUG] Using primary key column: {pk_col}")
+        # Use provided primary key column name if available, otherwise detect it dynamically
+        if pk:
+            print(f"[DEBUG] Using provided primary key column: {pk}")
+            pk_col = pk
+        else:
+            # Dynamically detect the primary key column for the table
+            from sqlalchemy import inspect
+            print("[DEBUG] Inspecting table for primary key...")
+            inspector = inspect(db.get_bind())
+            pk_cols = inspector.get_pk_constraint(table_name, schema="dbo")
+            print(f"[DEBUG] PK constraint info: {pk_cols}")
+            if not pk_cols or not pk_cols['constrained_columns']:
+                print(f"[ERROR] Table {table_name} has no primary key.")
+                raise HTTPException(status_code=500, detail=f"Table {table_name} has no primary key.")
+            pk_col = pk_cols['constrained_columns'][0]
+            print(f"[DEBUG] Using detected primary key column: {pk_col}")
 
         # Build the delete query using parameterized statements
         query = f"DELETE FROM {table_name} WHERE {pk_col} = ?"

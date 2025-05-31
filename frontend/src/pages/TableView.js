@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMsal } from '@azure/msal-react';
 import { toast } from 'react-hot-toast';
@@ -39,535 +40,520 @@ const TableView = () => {
   const [editValues, setEditValues] = useState({});
   const [filterColumn, setFilterColumn] = useState('');
   const [filterValue, setFilterValue] = useState('');
-  const columns = React.useMemo(() => {
-  if (!data || data.length === 0) return [];
-  const firstRow = data[0];
-  const columnHelper = createColumnHelper();
+  // New: state for primary key column name
+  const [primaryKeyCol, setPrimaryKeyCol] = useState('id');
+  const [fieldNames, setFieldNames] = useState([]);
+  const [allFields, setAllFields] = useState([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newRowData, setNewRowData] = useState({});
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [rowToDelete, setRowToDelete] = useState(null);
 
-  const tableColumns = Object.keys(firstRow)
-    .filter(key => key !== '_tempId')
-    .map((key) => {
-      return columnHelper.accessor(key, {
-        id: key,
-        header: key,
+  // Fetch table metadata to get primary key column
+  useEffect(() => {
+    const fetchMetadata = async () => {
+      if (!accounts || accounts.length === 0) return;
+      try {
+        const meta = await apiService.getTableMetadata(instance, accounts[0], tableName);
+        if (meta && meta.columns) {
+          const pkCol = meta.columns.find(col => col.primary_key);
+          setPrimaryKeyCol(pkCol ? pkCol.name : 'id');
+        } else {
+          setPrimaryKeyCol('id');
+        }
+      } catch (err) {
+        setPrimaryKeyCol('id');
+      }
+    };
+    fetchMetadata();
+  }, [tableName, instance, accounts]);
+
+  const columns = React.useMemo(() => {
+    if (!data || data.length === 0) return [];
+    const firstRow = data[0];
+    const columnHelper = createColumnHelper();
+
+    const tableColumns = Object.keys(firstRow)
+      .filter(key => key !== '_tempId')
+      .map((key) => {
+        return columnHelper.accessor(key, {
+          id: key,
+          header: key,
+          cell: (info) => {
+            const value = info.getValue();
+            const rowIndex = info.row.index;
+            const rowData = data[rowIndex];
+            const columnId = info.column.id;
+
+            if (editingRow === rowIndex) {
+              return (
+                <input
+                  type="text"
+                  value={editValues[columnId] !== undefined ? editValues[columnId] : (value !== null && value !== undefined ? String(value) : '')}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setEditValues(prev => ({
+                      ...prev,
+                      [columnId]: newValue
+                    }));
+                    // Set this as the focused cell when typing
+                    setFocusedCell(`${rowIndex}-${columnId}`);
+                  }}
+                  onFocus={() => {
+                    // Track which cell is focused
+                    setFocusedCell(`${rowIndex}-${columnId}`);
+                  }}
+                  onClick={(e) => {
+                    // Prevent click from propagating and losing focus
+                    e.stopPropagation();
+                  }}
+                  className="w-full p-1 border border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
+                  autoFocus={focusedCell === `${rowIndex}-${columnId}`}
+                />
+              );
+            }
+
+            return (
+              <div className="p-1">
+                {value !== null && value !== undefined ? String(value) : ''}
+              </div>
+            );
+          },
+        });
+      });
+
+    // Add actions column
+    tableColumns.push(
+      columnHelper.display({
+        id: 'actions',
+        header: 'Actions',
         cell: (info) => {
-          const value = info.getValue();
           const rowIndex = info.row.index;
           const rowData = data[rowIndex];
-          const columnId = info.column.id;
+          const rowId = rowData[primaryKeyCol] !== undefined ? rowData[primaryKeyCol] : rowData._tempId;
+
+          if (!rowData) {
+            return (
+              <div className="flex items-center space-x-2">
+                <button
+                  className="p-1 text-blue-600 hover:text-blue-800"
+                  title="Edit Row"
+                  disabled
+                >
+                  <PencilIcon className="h-5 w-5 opacity-50" />
+                </button>
+              </div>
+            );
+          }
 
           if (editingRow === rowIndex) {
             return (
-              <input
-                type="text"
-                value={editValues[columnId] !== undefined ? editValues[columnId] : (value !== null && value !== undefined ? String(value) : '')}
-                onChange={(e) => {
-                  const newValue = e.target.value;
-                  setEditValues(prev => ({
-                    ...prev,
-                    [columnId]: newValue
-                  }));
-                }}
-                className="w-full p-1 border border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
-                autoFocus={columnId === Object.keys(rowData).filter(k => k !== 'id' && k !== '_tempId')[0]}
-              />
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => handleSaveEdit(rowIndex, rowId)}
+                  className="p-1 text-green-600 hover:text-green-800 edit-action-button"
+                  title="Save Changes"
+                >
+                  <CheckIcon className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={() => handleCancelEdit()}
+                  className="p-1 text-red-600 hover:text-red-800 edit-action-button"
+                  title="Cancel Edit"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
             );
           }
 
           return (
-            <div className="p-1">
-              {value !== null && value !== undefined ? String(value) : ''}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handleEditRow(rowIndex, rowData)}
+                className="p-1 text-blue-600 hover:text-blue-800"
+                title="Edit Row"
+              >
+                <PencilIcon className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => handleDeleteClick(rowId)}
+                className="p-1 text-red-600 hover:text-red-800"
+                title="Delete Row"
+              >
+                <TrashIcon className="h-5 w-5" />
+              </button>
             </div>
           );
         },
-      });
-    });
+      })
+    );
 
-  // Add actions column
-  tableColumns.push(
-    columnHelper.display({
-      id: 'actions',
-      header: 'Actions',
-      cell: (info) => {
-        const rowIndex = info.row.index;
-        const rowData = data[rowIndex];
-        const rowId = rowData.id !== undefined ? rowData.id : rowData._tempId;
+    return tableColumns;
+  }, [data, editingRow, editValues, primaryKeyCol]);
 
-        if (!rowData) {
-          return (
-            <div className="flex items-center space-x-2">
-              <button
-                className="p-1 text-blue-600 hover:text-blue-800"
-                title="Edit Row"
-                disabled
-              >
-                <PencilIcon className="h-5 w-5 opacity-50" />
-              </button>
-            </div>
-          );
-        }
-
-        if (editingRow === rowIndex) {
-          return (
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => handleSaveEdit(rowIndex, rowId)}
-                className="p-1 text-green-600 hover:text-green-800"
-                title="Save Changes"
-              >
-                <CheckIcon className="h-5 w-5" />
-              </button>
-              <button
-                onClick={() => handleCancelEdit()}
-                className="p-1 text-red-600 hover:text-red-800"
-                title="Cancel Edit"
-              >
-                <XMarkIcon className="h-5 w-5" />
-              </button>
-            </div>
-          );
-        }
-
-        return (
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => handleEditRow(rowIndex, rowData)}
-              className="p-1 text-blue-600 hover:text-blue-800"
-              title="Edit Row"
-            >
-              <PencilIcon className="h-5 w-5" />
-            </button>
-            <button
-              onClick={() => handleDeleteRow(rowId)}
-              className="p-1 text-red-600 hover:text-red-800"
-              title="Delete Row"
-            >
-              <TrashIcon className="h-5 w-5" />
-            </button>
-          </div>
-        );
-      },
-    })
-  );
-
-  return tableColumns;
-}, [data, editingRow, editValues]);
-
-  const [fieldNames, setFieldNames] = useState([]);
-  const [allFields, setAllFields] = useState([]); // Added to include ID field
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newRowData, setNewRowData] = useState({});
-  const [refreshTrigger, setRefreshTrigger] = useState(0); // Added to force refreshes
-  
-  // Fetch table data
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const params = {
-        page: pagination.page,
-        page_size: pagination.pageSize,
-      };
-      
-      if (filterColumn && filterValue) {
-        params.filter_column = filterColumn;
-        params.filter_value = filterValue;
-      }
-      
-      const response = await apiService.getTableData(
-        instance,
-        accounts[0],
-        tableName,
-        params
-      );
-      
-      // Process data to ensure each row has a unique identifier
-      let processedData = [];
-      if (response.data && response.data.length > 0) {
-        processedData = response.data.map((row, index) => {
-          // If the row doesn't have an id, add a temporary one based on the index
-          if (row.id === undefined) {
-            return { ...row, _tempId: `temp-${index}` };
-          }
-          return row;
-        });
-      }
-      
-      setData(processedData);
-      setPagination({
-        ...pagination,
-        total: response.total || 0,
-        totalPages: response.total_pages || 0,
-      });
-      
-      // Dynamically create columns from the first row
-      if (response.data && response.data.length > 0) {
-        const firstRow = response.data[0];
-        // Store all fields including ID for reference
-        setAllFields(Object.keys(firstRow).filter(key => key !== '_tempId'));
-        // For editing, we still exclude ID
-        setFieldNames(Object.keys(firstRow).filter(key => key !== '_tempId' && key !== 'id'));
-        const columnHelper = createColumnHelper();
-        
-        // Create columns for data fields
-        const tableColumns = Object.keys(firstRow)
-          .filter(key => key !== '_tempId')
-          .map((key) => {
-            return columnHelper.accessor(key, {
-              header: key,
-              cell: (info) => {
-                const value = info.getValue();
-                const rowIndex = info.row.index;
-                const rowData = data[rowIndex];
-                const columnId = info.column.id;
-                
-                // Check if this row is being edited
-                if (editingRow === rowIndex) {
-                  return (
-                    <input
-                      type="text"
-                      value={editValues[columnId] !== undefined ? editValues[columnId] : (value !== null && value !== undefined ? String(value) : '')}
-                      onChange={(e) => {
-                        const newValue = e.target.value;
-                        setEditValues(prev => ({
-                          ...prev,
-                          [columnId]: newValue
-                        }));
-                      }}
-                      className="w-full p-1 border border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
-                      autoFocus={columnId === Object.keys(rowData).filter(k => k !== 'id' && k !== '_tempId')[0]}
-                    />
-                  );
-                }
-                
-                return (
-                  <div className="p-1">
-                    {value !== null && value !== undefined ? String(value) : ''}
-                  </div>
-                );
-              },
-            });
-          });
-        
-        // Add actions column
-        tableColumns.push(
-          columnHelper.display({
-            id: 'actions',
-            header: 'Actions',
-            cell: (info) => {
-              const rowIndex = info.row.index;
-              const rowData = data[rowIndex];
-              
-              // Check if rowData exists
-              if (!rowData) {
-                return (
-                  <div className="flex items-center space-x-2">
-                    <button
-                      className="p-1 text-blue-600 hover:text-blue-800"
-                      title="Edit Row"
-                      disabled
-                    >
-                      <PencilIcon className="h-5 w-5 opacity-50" />
-                    </button>
-                  </div>
-                );
-              }
-              
-              // Use either the real ID or the temporary ID
-              const rowId = rowData.id !== undefined ? rowData.id : rowData._tempId;
-              
-              // If this row is being edited, show save/cancel buttons
-              if (editingRow === rowIndex) {
-                return (
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => handleSaveEdit(rowIndex, rowId)}
-                      className="p-1 text-green-600 hover:text-green-800"
-                      title="Save Changes"
-                    >
-                      <CheckIcon className="h-5 w-5" />
-                    </button>
-                    <button
-                      onClick={() => handleCancelEdit()}
-                      className="p-1 text-red-600 hover:text-red-800"
-                      title="Cancel Edit"
-                    >
-                      <XMarkIcon className="h-5 w-5" />
-                    </button>
-                  </div>
-                );
-              }
-              
-              // Otherwise show edit/delete buttons
-              return (
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => handleEditRow(rowIndex, rowData)}
-                    className="p-1 text-blue-600 hover:text-blue-800"
-                    title="Edit Row"
-                  >
-                    <PencilIcon className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteRow(rowId)}
-                    className="p-1 text-red-600 hover:text-red-800"
-                    title="Delete Row"
-                  >
-                    <TrashIcon className="h-5 w-5" />
-                  </button>
-                </div>
-              );
-            },
-          })
-        );
-        
-        // setColumns(tableColumns);
-      }
-    } catch (err) {
-      console.error('Error fetching table data:', err);
-      setError(err.message);
-      toast.error(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  useEffect(() => {
-    if (accounts && accounts.length > 0) {
-      fetchData();
-    }
-  }, [tableName, pagination.page, pagination.pageSize, instance, accounts, refreshTrigger]);
-  
-  // Handle editing a row
-  // Replace any calls to handleDeleteRow in JSX or actions to use the new robust version above.
-
-  const handleEditRow = (rowIndex, rowData) => {
-    // Initialize edit values with current row data
-    const initialEditValues = {};
-    Object.keys(rowData).forEach(key => {
-      if (key !== 'id' && key !== '_tempId') {
-        initialEditValues[key] = rowData[key] !== null && rowData[key] !== undefined ? String(rowData[key]) : '';
-      }
-    });
-    
-    setEditValues(initialEditValues);
-    setEditingRow(rowIndex);
-  };
-  
-  // Handle canceling edit
-  const handleCancelEdit = () => {
-    setEditingRow(null);
-    setEditValues({});
-  };
-  
-  // Handle saving edit
-  const handleSaveEdit = async (rowIndex, rowId) => {
-    try {
-      // Check if any values have changed
-      const rowData = data[rowIndex];
-      const updates = {};
-      let hasChanges = false;
-      
-      Object.keys(editValues).forEach(key => {
-        const originalValue = rowData[key] !== null && rowData[key] !== undefined ? String(rowData[key]) : '';
-        if (editValues[key] !== originalValue) {
-          updates[key] = editValues[key];
-          hasChanges = true;
-        }
-      });
-      
-      if (!hasChanges) {
-        toast.info('No changes to save');
-        setEditingRow(null);
-        setEditValues({});
-        return;
-      }
-      
-      // If it's a temporary ID, show a warning
-      if (rowId && rowId.toString().startsWith('temp-')) {
-        toast.warning('This row may not have a real ID in the database. Changes might not be saved correctly.');
-      }
-      
-      toast.loading('Saving changes...');
-      await apiService.updateRow(instance, accounts[0], tableName, rowId, updates);
-      
-      // Update local data
-      const newData = [...data];
-      newData[rowIndex] = {
-        ...newData[rowIndex],
-        ...updates
-      };
-      setData(newData);
-      
-      toast.dismiss();
-      toast.success('Changes saved successfully');
-      
-      // Exit edit mode
-      setEditingRow(null);
-      setEditValues({});
-    } catch (err) {
-      console.error('Error saving changes:', err);
-      toast.dismiss();
-      toast.error(`Failed to save changes: ${err.message}`);
-    }
-  };
-  
-  // Handle adding a new row
-  const handleAddRow = async () => {
-    try {
-      // Check if newRowData has any values
-      if (Object.keys(newRowData).length === 0) {
-        toast.error('Please fill in at least one field');
-        return;
-      }
-      
-      console.log('Adding new row with data:', newRowData);
-      toast.loading('Adding new row...');
-      
-      // Remove ID field if it's in the newRowData
-      const dataToSend = { ...newRowData };
-      if ('id' in dataToSend) {
-        delete dataToSend.id;
-      }
-      
-      const result = await apiService.insertRow(instance, accounts[0], tableName, dataToSend);
-      console.log('Insert result:', result);
-      
-      // Check if result contains a success indicator
-      if (!result || (result.success === false)) {
-        toast.dismiss();
-        toast.error('Backend did not return a successful insert.');
-        console.error('Insert failed or returned unexpected result:', result);
-        return;
-      }
-      
-      // If we have a simulated response with ID, add the row to our data immediately
-      if (result.id) {
-        const newRow = { ...dataToSend, id: result.id };
-        setData(prevData => [newRow, ...prevData]);
-      }
-      
-      // Force a data refresh by incrementing the refreshTrigger
-      setRefreshTrigger(prev => prev + 1);
-      
-      // Reset form
-      setShowAddForm(false);
-      setNewRowData({});
-      
-      toast.dismiss();
-      toast.success('New row added successfully');
-    } catch (err) {
-      console.error('Error adding row:', err);
-      toast.dismiss();
-      toast.error(`Failed to add row: ${err.message}`);
-    }
-  };
-
-  // Robust error handling for deleting a row
-  const handleDeleteRow = async (rowId) => {
-    if (!confirm('Are you sure you want to delete this row?')) {
-      return;
-    }
-    
-    try {
-      toast.loading('Deleting row...');
-      const result = await apiService.deleteRow(instance, accounts[0], tableName, rowId);
-      console.log('Delete result:', result);
-      
-      // Even if backend returns success=false, proceed with UI update
-      // because we're using simulated success responses
-      
-      // Remove the row from the UI immediately
-      setData(prevData => prevData.filter(row => 
-        row.id !== rowId && (row._tempId ? row._tempId !== rowId : true)
-      ));
-      
-      // Force a refresh
-      setRefreshTrigger(prev => prev + 1);
-      
-      toast.dismiss();
-      toast.success('Row deleted successfully');
-    } catch (err) {
-      console.error('Error deleting row:', err);
-      toast.dismiss();
-      toast.error(`Failed to delete row: ${err.message}`);
-    }
-  };
-
-  
-  // Handle change in new row form
-  const handleNewRowChange = (columnId, value) => {
-    setNewRowData(prev => {
-      const newData = { ...prev };
-      newData[columnId] = value;
-      return newData;
-    });
-  };
-  
-  // Handle filter submission
-  const handleFilterSubmit = (e) => {
-    e.preventDefault();
-    fetchData();
-  };
-  
-  // Handle filter reset
-  const handleFilterReset = () => {
-    setFilterColumn('');
-    setFilterValue('');
-    // Reset to first page when clearing filters
-    setPagination({
-      ...pagination,
-      page: 1
-    });
-    // Fetch data without filters
-    fetchData();
-  };
-  
   // Create table instance
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
   });
+
+  // State for whether the primary key is auto-incrementing
+  const [isPkAutoIncrement, setIsPkAutoIncrement] = useState(true);
+  
+  // Fetch table metadata including primary key information
+  const fetchMetadata = async () => {
+    if (!accounts || accounts.length === 0) return;
+    
+    try {
+      console.log(`Fetching metadata for table: ${tableName}`);
+      const metadata = await apiService.getTableMetadata(instance, accounts[0], tableName);
+      console.log('Table metadata:', metadata);
+      
+      // Extract primary key column name
+      if (metadata && metadata.primary_key) {
+        console.log(`Setting primary key column to: ${metadata.primary_key}`);
+        setPrimaryKeyCol(metadata.primary_key);
+        
+        // Check if the primary key is auto-incrementing
+        if (metadata.is_auto_increment !== undefined) {
+          console.log(`Primary key auto-increment: ${metadata.is_auto_increment}`);
+          setIsPkAutoIncrement(metadata.is_auto_increment);
+        } else {
+          // Default to true if not specified
+          console.log('Auto-increment info not found, assuming true');
+          setIsPkAutoIncrement(true);
+        }
+        
+        // Extract column information for empty tables
+        if (metadata.columns && metadata.columns.length > 0) {
+          console.log('Extracting column names from metadata for potentially empty table');
+          const columnNames = metadata.columns.map(col => col.name);
+          console.log('Column names from metadata:', columnNames);
+          
+          // Only set field names if they're not already set (empty table case)
+          if (fieldNames.length === 0) {
+            setFieldNames(columnNames);
+            setAllFields(columnNames);
+          }
+        }
+      } else {
+        // Fallback to 'id' if primary key not found in metadata
+        console.log('Primary key not found in metadata, using default: id');
+        setPrimaryKeyCol('id');
+        setIsPkAutoIncrement(true);
+      }
+    } catch (err) {
+      console.error('Error fetching table metadata:', err);
+      // Fallback to 'id' if metadata fetch fails
+      setPrimaryKeyCol('id');
+      setIsPkAutoIncrement(true);
+    }
+  };
+  
+  // Fetch data from API
+  const fetchData = async (page = pagination.page, filterParams = null) => {
+    if (!accounts || accounts.length === 0) return;
+    
+    setLoading(true);
+    try {
+      const response = await apiService.getTableData(
+        instance,
+        accounts[0],
+        tableName,
+        page,
+        pagination.pageSize,
+        filterParams
+      );
+      
+      if (response && response.data) {
+        setData(response.data);
+        setPagination({
+          page: response.page,
+          pageSize: response.pageSize,
+          totalPages: response.totalPages,
+          total: response.total,
+        });
+        
+        // Extract field names for add form
+        if (response.data.length > 0) {
+          const fields = Object.keys(response.data[0]).filter(
+            (field) => field !== '_tempId'
+          );
+          setFieldNames(fields);
+          setAllFields(fields);
+        }
+        // If we have column information but no data, make sure we fetch metadata
+        else if (fieldNames.length === 0) {
+          console.log('Table is empty, fetching metadata to get column information');
+          fetchMetadata();
+        }
+      }
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      setError('Failed to load data. Please try again later.');
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Fetch metadata and data when component mounts or table changes
+  useEffect(() => {
+    if (accounts && accounts.length > 0) {
+      // First fetch metadata to get primary key column
+      fetchMetadata().then(() => {
+        // Then fetch data
+        fetchData();
+      });
+    }
+  }, [accounts, tableName, instance]);
+  
+  // Track the currently focused cell
+  const [focusedCell, setFocusedCell] = useState(null);
+
+  // Handle edit row
+  const handleEditRow = (rowIndex, rowData) => {
+    setEditingRow(rowIndex);
+    setEditValues({});
+    // Reset focused cell when starting to edit
+    setFocusedCell(null);
+  };
+  
+  // Handle canceling edit
+  const handleCancelEdit = () => {
+    setEditingRow(null);
+    setEditValues({});
+    setFocusedCell(null);
+  };
+  
+  // Handle saving edit
+  const handleSaveEdit = async (rowIndex, rowId) => {
+    if (!accounts || accounts.length === 0) return;
+    
+    const rowData = data[rowIndex];
+    const updatedData = { ...rowData };
+    
+    // Apply edits
+    Object.keys(editValues).forEach((key) => {
+      updatedData[key] = editValues[key];
+    });
+    
+    try {
+      await apiService.updateRow(
+        instance,
+        accounts[0],
+        tableName,
+        rowId,
+        updatedData,
+        primaryKeyCol
+      );
+      
+      // Update local data
+      const newData = [...data];
+      newData[rowIndex] = updatedData;
+      setData(newData);
+      
+      toast.success('Row updated successfully');
+      setEditingRow(null);
+      setEditValues({});
+      setFocusedCell(null);
+    } catch (err) {
+      console.error('Error updating row:', err);
+      toast.error('Failed to update row. Please try again.');
+    }
+  };
+  
+  // Handle adding a new row
+  const handleAddRow = async () => {
+    if (!accounts || accounts.length === 0) return;
+    
+    try {
+      console.log(`Adding new row to table: ${tableName} with primary key column: ${primaryKeyCol}`);
+      console.log(`Primary key auto-increment: ${isPkAutoIncrement}`);
+      console.log('New row data before processing:', newRowData);
+      
+      // Validate primary key for non-auto-incrementing tables
+      if (!isPkAutoIncrement && (!newRowData[primaryKeyCol] || newRowData[primaryKeyCol] === '')) {
+        console.error(`Primary key value is required for non-auto-incrementing column ${primaryKeyCol}`);
+        toast.error('Primary key value is required for this table');
+        return;
+      }
+      
+      // Prepare data - remove id if it's empty (for auto-increment)
+      const rowToAdd = { ...newRowData };
+      if (isPkAutoIncrement && (!rowToAdd[primaryKeyCol] || rowToAdd[primaryKeyCol] === '')) {
+        console.log(`Removing empty primary key ${primaryKeyCol} for auto-increment`);
+        delete rowToAdd[primaryKeyCol];
+      }
+      
+      console.log('Row data after processing:', rowToAdd);
+      
+      // Add temporary ID for optimistic UI update
+      const tempId = `temp-${Date.now()}`;
+      const tempRow = { ...rowToAdd, _tempId: tempId };
+      
+      // Optimistic update
+      setData([tempRow, ...data]);
+      
+      // Send to API
+      const response = await apiService.insertRow(
+        instance,
+        accounts[0],
+        tableName,
+        rowToAdd,
+        primaryKeyCol
+      );
+      
+      // Replace temp row with actual row from response
+      if (response) {
+        console.log('Insert row response:', response);
+        // Create a new row object with the returned primary key value
+        const newRow = { ...rowToAdd };
+        
+        let pkValueFound = false;
+        
+        // Handle both formats: response.id or response[primaryKeyCol]
+        if (response[primaryKeyCol] !== undefined) {
+          console.log(`Found primary key ${primaryKeyCol} in response with value:`, response[primaryKeyCol]);
+          newRow[primaryKeyCol] = response[primaryKeyCol];
+          pkValueFound = true;
+        } else if (response.id !== undefined) {
+          console.log(`Found 'id' in response with value:`, response.id);
+          newRow[primaryKeyCol] = response.id;
+          pkValueFound = true;
+        } else if (response.success && response[primaryKeyCol] !== undefined) {
+          // Handle debug endpoint response format
+          console.log(`Found primary key ${primaryKeyCol} in success response with value:`, response[primaryKeyCol]);
+          newRow[primaryKeyCol] = response[primaryKeyCol];
+          pkValueFound = true;
+        }
+        
+        // For non-auto-incrementing primary keys, use the value we sent
+        if (!isPkAutoIncrement && !pkValueFound && newRowData[primaryKeyCol]) {
+          console.log(`Using provided primary key for non-auto-incrementing column:`, newRowData[primaryKeyCol]);
+          newRow[primaryKeyCol] = newRowData[primaryKeyCol];
+          pkValueFound = true;
+        }
+        
+        // Copy any other fields from the response that might have been modified by the server
+        for (const key in response) {
+          if (key !== 'success' && key !== 'message' && key !== primaryKeyCol) {
+            newRow[key] = response[key];
+          }
+        }
+        
+        console.log('Final new row data to display:', newRow);
+        
+        const newData = data.map((row) => 
+          row._tempId === tempId ? { ...newRow, _tempId: undefined } : row
+        );
+        setData(newData);
+      }
+      
+      // Reset form
+      setNewRowData({});
+      setShowAddForm(false);
+      toast.success('Row added successfully');
+      
+      // Always refresh data from server to ensure UI is up-to-date
+      console.log('Refreshing data from server after adding row');
+      fetchData();
+    } catch (err) {
+      console.error('Error adding row:', err);
+      toast.error('Failed to add row. Please try again.');
+      
+      // Remove temp row on error
+      setData(data.filter((row) => !row._tempId));
+    }
+  };
+
+  // Show confirmation dialog before deleting a row
+  const handleDeleteClick = (rowId) => {
+    setRowToDelete(rowId);
+    setConfirmOpen(true);
+  };
+
+  // Robust error handling for deleting a row
+  const handleDeleteRow = async (rowId) => {
+    setConfirmOpen(false);
+    
+    if (!rowId || !accounts || accounts.length === 0) return;
+    
+    try {
+      // Optimistic UI update - remove row from UI immediately
+      const newData = data.filter(row => row[primaryKeyCol] !== rowId);
+      setData(newData);
+      
+      // Call API to delete row
+      await apiService.deleteRow(instance, accounts[0], tableName, rowId, primaryKeyCol);
+      
+      toast.success('Row deleted successfully');
+    } catch (err) {
+      console.error('Error deleting row:', err);
+      toast.error('Failed to delete row. Please try again.');
+      
+      // Revert optimistic update on error
+      fetchData();
+    }
+  };
+  
+  // Handle change in new row form
+  const handleNewRowChange = (columnId, value) => {
+    console.log(`Updating new row data for column: ${columnId} with value: ${value}`);
+    console.log(`Is primary key column: ${columnId === primaryKeyCol}`);
+    
+    // If this is the primary key column, handle it based on whether it's auto-incrementing
+    if (columnId === primaryKeyCol) {
+      if (isPkAutoIncrement && (value === '' || value === undefined)) {
+        console.log('Auto-incrementing primary key with empty value - will be auto-generated by backend');
+      } else if (!isPkAutoIncrement && (value === '' || value === undefined)) {
+        console.log('Non-auto-incrementing primary key requires a value');
+      }
+    }
+    
+    setNewRowData((prev) => {
+      const updated = {
+        ...prev,
+        [columnId]: value,
+      };
+      console.log('Updated new row data:', updated);
+      return updated;
+    });
+  };
+  
+  // Handle filter submission
+  const handleFilterSubmit = (e) => {
+    e.preventDefault();
+    fetchData(1, { column: filterColumn, value: filterValue });
+  };
+  
+  // Handle filter reset
+  const handleFilterReset = () => {
+    setFilterColumn('');
+    setFilterValue('');
+    fetchData(1);
+  };
   
   // Handle page change
   const handlePageChange = (newPage) => {
     if (newPage < 1 || newPage > pagination.totalPages) return;
-    
-    setPagination({
-      ...pagination,
-      page: newPage
-    });
+    fetchData(newPage);
   };
 
   // If no account is signed in, show sign in message
   if (!accounts || accounts.length === 0) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <div className="bg-white rounded-lg shadow p-6 text-center">
-          <h2 className="text-xl font-semibold mb-4">Authentication Required</h2>
-          <p className="mb-4">Please sign in to view table data.</p>
-          <button
-            onClick={() => navigate('/')}
-            className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-          >
-            Go to Dashboard
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // If there's an access denied error
-  if (error && error.includes('access')) {
-    return (
-      <div className="container mx-auto px-4 py-8">
         <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h1 className="text-2xl font-bold text-gray-800">Table View</h1>
             <button
               onClick={() => navigate('/')}
-              className="mr-4 flex items-center text-primary-600 hover:text-primary-800"
+              className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
             >
-              <ChevronLeftIcon className="h-5 w-5 mr-1" />
               Back to Dashboard
             </button>
           </div>
@@ -620,15 +606,22 @@ const TableView = () => {
               {allFields.map(field => (
                 <div key={field} className="mb-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {field} {field === 'id' && <span className="text-xs text-gray-500">(auto-generated)</span>}
+                    {field} {field === primaryKeyCol && (
+                      <span className="text-xs text-gray-500">
+                        ({isPkAutoIncrement ? 'auto-generated' : 'required'})
+                      </span>
+                    )}
                   </label>
                   <input
                     type="text"
                     value={newRowData[field] || ''}
                     onChange={e => handleNewRowChange(field, e.target.value)}
                     className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                    placeholder={field === 'id' ? 'Auto-generated' : `Enter ${field}`}
-                    disabled={field === 'id'}
+                    placeholder={field === primaryKeyCol ? 
+                      (isPkAutoIncrement ? 'Auto-generated' : 'Enter primary key value') : 
+                      `Enter ${field}`
+                    }
+                    disabled={field === primaryKeyCol && isPkAutoIncrement}
                   />
                 </div>
               ))}
@@ -772,11 +765,15 @@ const TableView = () => {
             <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-gray-700">
-                  Showing <span className="font-medium">{(pagination.page - 1) * pagination.pageSize + 1}</span> to{' '}
-                  <span className="font-medium">
-                    {Math.min(pagination.page * pagination.pageSize, pagination.total)}
-                  </span>{' '}
-                  of <span className="font-medium">{pagination.total}</span> results
+                  {data.length === 0 ? (
+                    'No results to display'
+                  ) : (
+                    <>
+                      Showing <span className="font-medium">1</span> to{' '}
+                      <span className="font-medium">{data.length}</span>{' '}
+                      of <span className="font-medium">{data.length}</span> results
+                    </>
+                  )}
                 </p>
               </div>
               <div>
@@ -836,6 +833,18 @@ const TableView = () => {
           </div>
         )}
       </div>
+      
+      {/* ConfirmDialog for delete confirmation */}
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Delete Row"
+        message="Are you sure you want to delete this row?"
+        onConfirm={() => handleDeleteRow(rowToDelete)}
+        onCancel={() => {
+          setConfirmOpen(false);
+          setRowToDelete(null);
+        }}
+      />
     </div>
   );
 };

@@ -41,7 +41,6 @@ const ProtectedRoute = ({ children }) => {
   
   if (!isAuthenticated) {
     console.log('ProtectedRoute - Not authenticated, redirecting to login');
-    toast.error('Please log in to access this page');
     return <Navigate to="/login" replace />;
   }
   
