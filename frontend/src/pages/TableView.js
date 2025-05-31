@@ -244,13 +244,19 @@ const TableView = () => {
     
     setLoading(true);
     try {
+      // Always build filter params from state unless explicitly provided
+      let params = {
+        page: page,
+        page_size: pagination.pageSize,
+        filter_column: filterColumn,
+        filter_value: filterValue,
+        ...filterParams
+      };
       const response = await apiService.getTableData(
         instance,
         accounts[0],
         tableName,
-        page,
-        pagination.pageSize,
-        filterParams
+        params
       );
       
       if (response && response.data) {
@@ -514,14 +520,15 @@ const TableView = () => {
   // Handle filter submission
   const handleFilterSubmit = (e) => {
     e.preventDefault();
-    fetchData(1, { column: filterColumn, value: filterValue });
+    fetchData(1, { filter_column: filterColumn, filter_value: filterValue });
   };
   
   // Handle filter reset
   const handleFilterReset = () => {
     setFilterColumn('');
     setFilterValue('');
-    fetchData(1);
+    // Immediately reload all data without filters
+    fetchData(1, { filter_column: '', filter_value: '' });
   };
   
   // Handle page change
