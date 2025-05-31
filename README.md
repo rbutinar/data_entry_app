@@ -25,6 +25,8 @@ The following features are planned for upcoming releases:
   - Support both credential-based (admin-defined) and Microsoft Entra ID (Azure AD) passthrough authentication, configurable via settings.
 - **Excel-like grid with AG Grid or similar:**
   - Option to use AG Grid React or a similar library for a more "Excel-style" data entry and editing experience, including advanced features like copy-paste, fill handle, and keyboard navigation.
+- **Cloud publishing for public use:**
+  - Publish the app on Azure Function App and Azure Web App for public use, including deployment instructions and best practices.
 
 If you are interested in contributing or have feature requests, please open an issue or PR!
 
