@@ -135,46 +135,65 @@ export const apiService = {
    * @param {string} primaryKeyCol - Name of the primary key column
    * @returns {Promise<Object>} Response data
    */
-  async updateRow(instance, account, tableName, rowId, updates, primaryKeyCol = 'id') {
+  async updateRow(instance, account, tableName, rowId, updates, primaryKeyCol) {
     try {
-      // First try the test endpoint without authentication
-      console.log(`Trying test endpoint for updating row in table: ${tableName}`);
+      // Debug logging for test endpoint
       const testUrl = `${apiConfig.baseUrl}/debug/test-table-data/${tableName}/${rowId}?pk=${primaryKeyCol}`;
-      console.log(`Test URL: ${testUrl}`);
-      
-      const testResponse = await fetch(testUrl, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(updates)
-      });
-      
-      if (testResponse.ok) {
-        console.log(`Test endpoint successful for updating row in table: ${tableName}`);
-        return testResponse.json();
-      }
-      
-      // If test endpoint fails, try the authenticated endpoint
-      console.log(`Test endpoint failed, trying authenticated endpoint for updating row in table: ${tableName}`);
-      const accessToken = await getAccessToken(instance, account);
-      
-      const response = await fetch(`${apiConfig.baseUrl}${apiConfig.endpoints.data}/${tableName}/${rowId}?pk=${primaryKeyCol}`, {
+      const testOptions = {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
         },
-        body: JSON.stringify(updates)
+        body: JSON.stringify(updates),
+      };
+      console.log('[apiService.updateRow] TEST endpoint:', {
+        url: testUrl,
+        method: 'PATCH',
+        pk: primaryKeyCol,
+        rowId,
+        updates
       });
-      
+      const testResponse = await fetch(testUrl, testOptions);
+      let testResponseBody;
+      try { testResponseBody = await testResponse.clone().json(); } catch { testResponseBody = await testResponse.clone().text(); }
+      console.log('[apiService.updateRow] TEST endpoint response:', {
+        status: testResponse.status,
+        body: testResponseBody
+      });
+      if (testResponse.ok) {
+        return testResponseBody;
+      }
+      // If test endpoint fails, try the authenticated endpoint
+      const accessToken = await getAccessToken(instance, account);
+      const url = `${apiConfig.baseUrl}${apiConfig.endpoints.tables}/data/${tableName}/${rowId}?pk=${primaryKeyCol}`;
+      const options = {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      };
+      console.log('[apiService.updateRow] AUTH endpoint:', {
+        url,
+        method: 'PATCH',
+        pk: primaryKeyCol,
+        rowId,
+        updates
+      });
+      const response = await fetch(url, options);
+      let responseBody;
+      try { responseBody = await response.clone().json(); } catch { responseBody = await response.clone().text(); }
+      console.log('[apiService.updateRow] AUTH endpoint response:', {
+        status: response.status,
+        body: responseBody
+      });
       if (!response.ok) {
         throw new Error(`Error updating row: ${response.statusText}`);
       }
-      
-      return response.json();
+      return responseBody;
     } catch (error) {
-      console.error(`Error in updateRow: ${error.message}`);
+      console.error('[apiService.updateRow] ERROR:', error);
       throw error;
     }
   },

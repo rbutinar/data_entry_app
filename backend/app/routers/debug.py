@@ -54,18 +54,21 @@ async def get_test_table_metadata(table_name: str, db: Session = Depends(get_db)
         
         # Get primary key information
         pk_constraint = inspector.get_pk_constraint(table_name)
-        primary_key = pk_constraint["constrained_columns"][0] if pk_constraint and pk_constraint["constrained_columns"] else "id"
-        
-        print(f"Primary key for table {table_name}: {primary_key}")
-        
-        # Check if the primary key is auto-incrementing
-        is_auto_increment = False
-        try:
-            connection = db.connection()
-            is_auto_increment = is_identity_column(connection, table_name, primary_key)
-            print(f"Is primary key auto-incrementing: {is_auto_increment}")
-        except Exception as e:
-            print(f"Error checking if primary key is auto-incrementing: {e}")
+        if pk_constraint and pk_constraint["constrained_columns"]:
+            primary_key = pk_constraint["constrained_columns"][0]
+            print(f"Primary key for table {table_name}: {primary_key}")
+            # Check if the primary key is auto-incrementing
+            is_auto_increment = False
+            try:
+                connection = db.connection()
+                is_auto_increment = is_identity_column(connection, table_name, primary_key)
+                print(f"Is primary key auto-incrementing: {is_auto_increment}")
+            except Exception as e:
+                print(f"Error checking if primary key is auto-incrementing: {e}")
+        else:
+            primary_key = None
+            is_auto_increment = False
+            print(f"No primary key detected for table {table_name}.")
         
         return {
             "success": True,
@@ -110,6 +113,9 @@ async def update_test_table_row(
             set_parts = []
             values = []
             
+            # Remove primary key from updates if present
+            if primary_key := (pk if pk else 'id'):
+                updates = {k: v for k, v in updates.items() if k != primary_key}
             for key, value in updates.items():
                 set_parts.append(f"{key} = ?")
                 values.append(value)

@@ -57,6 +57,35 @@ A React-based front-end web app that connects to a SQL database (Azure SQL or Po
 
 ## Backend API Endpoints & Usage
 
+---
+
+### ⚡ Developer/Tester Debug Endpoints (No Auth Required)
+
+These endpoints are useful for debugging, development, or when you want to quickly inspect the database without authentication.
+
+#### 1. List All Tables (Debug)
+- **Endpoint:** `GET /debug/test-tables`
+- **Description:** Returns a list of all tables in the database (no authentication required).
+- **Example:**
+  ```sh
+  curl http://localhost:8000/debug/test-tables
+  ```
+
+#### 2. Get Table Structure/Schema (Debug)
+- **Endpoint:** `GET /debug/test-table-metadata/{table_name}`
+- **Description:** Returns metadata for a table, including column names, types, and primary key info (no authentication required).
+- **Example:**
+  ```sh
+  curl http://localhost:8000/debug/test-table-metadata/tabella_1
+  curl http://localhost:8000/debug/test-table-metadata/tabella_2
+  curl http://localhost:8000/debug/test-table-metadata/tabella_3
+  curl http://localhost:8000/debug/test-table-metadata/tabella_4
+  ```
+
+If you receive `{ "detail": "Not Found" }`, double-check the table name or use the list tables endpoint above to see available tables.
+
+---
+
 ### 1. List Tables
 - **Endpoint:** `GET /tables/`
 - **Description:** Returns all tables accessible to the user.

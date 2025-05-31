@@ -40,7 +40,7 @@ const TableView = () => {
   const [editValues, setEditValues] = useState({});
   const [filterColumn, setFilterColumn] = useState('');
   const [filterValue, setFilterValue] = useState('');
-  // New: state for primary key column name
+  // State for primary key column name (null means no PK)
   const [primaryKeyCol, setPrimaryKeyCol] = useState('id');
   const [fieldNames, setFieldNames] = useState([]);
   const [allFields, setAllFields] = useState([]);
@@ -48,25 +48,7 @@ const TableView = () => {
   const [newRowData, setNewRowData] = useState({});
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [rowToDelete, setRowToDelete] = useState(null);
-
-  // Fetch table metadata to get primary key column
-  useEffect(() => {
-    const fetchMetadata = async () => {
-      if (!accounts || accounts.length === 0) return;
-      try {
-        const meta = await apiService.getTableMetadata(instance, accounts[0], tableName);
-        if (meta && meta.columns) {
-          const pkCol = meta.columns.find(col => col.primary_key);
-          setPrimaryKeyCol(pkCol ? pkCol.name : 'id');
-        } else {
-          setPrimaryKeyCol('id');
-        }
-      } catch (err) {
-        setPrimaryKeyCol('id');
-      }
-    };
-    fetchMetadata();
-  }, [tableName, instance, accounts]);
+  const [noPrimaryKey, setNoPrimaryKey] = useState(false);
 
   const columns = React.useMemo(() => {
     if (!data || data.length === 0) return [];
@@ -96,19 +78,13 @@ const TableView = () => {
                       ...prev,
                       [columnId]: newValue
                     }));
-                    // Set this as the focused cell when typing
                     setFocusedCell(`${rowIndex}-${columnId}`);
                   }}
-                  onFocus={() => {
-                    // Track which cell is focused
-                    setFocusedCell(`${rowIndex}-${columnId}`);
-                  }}
-                  onClick={(e) => {
-                    // Prevent click from propagating and losing focus
-                    e.stopPropagation();
-                  }}
+                  onFocus={() => setFocusedCell(`${rowIndex}-${columnId}`)}
+                  onClick={(e) => e.stopPropagation()}
                   className="w-full p-1 border border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded"
                   autoFocus={focusedCell === `${rowIndex}-${columnId}`}
+                  disabled={noPrimaryKey}
                 />
               );
             }
@@ -130,9 +106,9 @@ const TableView = () => {
         cell: (info) => {
           const rowIndex = info.row.index;
           const rowData = data[rowIndex];
-          const rowId = rowData[primaryKeyCol] !== undefined ? rowData[primaryKeyCol] : rowData._tempId;
+          const rowId = primaryKeyCol && rowData[primaryKeyCol] !== undefined ? rowData[primaryKeyCol] : rowData._tempId;
 
-          if (!rowData) {
+          if (!rowData || noPrimaryKey) {
             return (
               <div className="flex items-center space-x-2">
                 <button
@@ -141,6 +117,13 @@ const TableView = () => {
                   disabled
                 >
                   <PencilIcon className="h-5 w-5 opacity-50" />
+                </button>
+                <button
+                  className="p-1 text-red-600 hover:text-red-800"
+                  title="Delete Row"
+                  disabled
+                >
+                  <TrashIcon className="h-5 w-5 opacity-50" />
                 </button>
               </div>
             );
@@ -153,6 +136,7 @@ const TableView = () => {
                   onClick={() => handleSaveEdit(rowIndex, rowId)}
                   className="p-1 text-green-600 hover:text-green-800 edit-action-button"
                   title="Save Changes"
+                  disabled={noPrimaryKey}
                 >
                   <CheckIcon className="h-5 w-5" />
                 </button>
@@ -173,6 +157,7 @@ const TableView = () => {
                 onClick={() => handleEditRow(rowIndex, rowData)}
                 className="p-1 text-blue-600 hover:text-blue-800"
                 title="Edit Row"
+                disabled={noPrimaryKey}
               >
                 <PencilIcon className="h-5 w-5" />
               </button>
@@ -180,6 +165,7 @@ const TableView = () => {
                 onClick={() => handleDeleteClick(rowId)}
                 className="p-1 text-red-600 hover:text-red-800"
                 title="Delete Row"
+                disabled={noPrimaryKey}
               >
                 <TrashIcon className="h-5 w-5" />
               </button>
@@ -190,7 +176,7 @@ const TableView = () => {
     );
 
     return tableColumns;
-  }, [data, editingRow, editValues, primaryKeyCol]);
+  }, [data, editingRow, editValues, primaryKeyCol, noPrimaryKey]);
 
   // Create table instance
   const table = useReactTable({
@@ -284,10 +270,9 @@ const TableView = () => {
           setFieldNames(fields);
           setAllFields(fields);
         }
-        // If we have column information but no data, make sure we fetch metadata
+        // If we have column information but no data, just update state (no metadata fetch)
         else if (fieldNames.length === 0) {
-          console.log('Table is empty, fetching metadata to get column information');
-          fetchMetadata();
+          console.log('Table is empty, but not fetching metadata again.');
         }
       }
       setError(null);
@@ -302,13 +287,17 @@ const TableView = () => {
   
   // Fetch metadata and data when component mounts or table changes
   useEffect(() => {
-    if (accounts && accounts.length > 0) {
-      // First fetch metadata to get primary key column
-      fetchMetadata().then(() => {
-        // Then fetch data
-        fetchData();
-      });
-    }
+    let isMounted = true;
+    const fetchAll = async () => {
+      if (accounts && accounts.length > 0) {
+        await fetchMetadata();
+        if (isMounted) {
+          fetchData();
+        }
+      }
+    };
+    fetchAll();
+    return () => { isMounted = false; };
   }, [accounts, tableName, instance]);
   
   // Track the currently focused cell
@@ -331,7 +320,7 @@ const TableView = () => {
   
   // Handle saving edit
   const handleSaveEdit = async (rowIndex, rowId) => {
-    if (!accounts || accounts.length === 0) return;
+    if (!accounts || accounts.length === 0 || !primaryKeyCol) return;
     
     const rowData = data[rowIndex];
     const updatedData = { ...rowData };
@@ -342,14 +331,22 @@ const TableView = () => {
     });
     
     try {
-      await apiService.updateRow(
+      console.log('[DEBUG] Attempting to update row', {
+        tableName,
+        primaryKeyCol,
+        rowId: rowData[primaryKeyCol],
+        updatedData,
+        rowData
+      });
+      const response = await apiService.updateRow(
         instance,
         accounts[0],
         tableName,
-        rowId,
+        rowData[primaryKeyCol], // Always use the correct PK value
         updatedData,
         primaryKeyCol
       );
+      console.log('[DEBUG] Update row API response:', response);
       
       // Update local data
       const newData = [...data];
@@ -361,7 +358,7 @@ const TableView = () => {
       setEditValues({});
       setFocusedCell(null);
     } catch (err) {
-      console.error('Error updating row:', err);
+      console.error('[DEBUG] Error updating row:', err);
       toast.error('Failed to update row. Please try again.');
     }
   };
@@ -394,9 +391,7 @@ const TableView = () => {
       // Add temporary ID for optimistic UI update
       const tempId = `temp-${Date.now()}`;
       const tempRow = { ...rowToAdd, _tempId: tempId };
-      
-      // Optimistic update
-      setData([tempRow, ...data]);
+      setData(prevData => [tempRow, ...prevData]);
       
       // Send to API
       const response = await apiService.insertRow(
@@ -410,30 +405,25 @@ const TableView = () => {
       // Replace temp row with actual row from response
       if (response) {
         console.log('Insert row response:', response);
+        
         // Create a new row object with the returned primary key value
         const newRow = { ...rowToAdd };
-        
         let pkValueFound = false;
         
         // Handle both formats: response.id or response[primaryKeyCol]
         if (response[primaryKeyCol] !== undefined) {
-          console.log(`Found primary key ${primaryKeyCol} in response with value:`, response[primaryKeyCol]);
           newRow[primaryKeyCol] = response[primaryKeyCol];
           pkValueFound = true;
         } else if (response.id !== undefined) {
-          console.log(`Found 'id' in response with value:`, response.id);
           newRow[primaryKeyCol] = response.id;
           pkValueFound = true;
         } else if (response.success && response[primaryKeyCol] !== undefined) {
-          // Handle debug endpoint response format
-          console.log(`Found primary key ${primaryKeyCol} in success response with value:`, response[primaryKeyCol]);
           newRow[primaryKeyCol] = response[primaryKeyCol];
           pkValueFound = true;
         }
         
         // For non-auto-incrementing primary keys, use the value we sent
         if (!isPkAutoIncrement && !pkValueFound && newRowData[primaryKeyCol]) {
-          console.log(`Using provided primary key for non-auto-incrementing column:`, newRowData[primaryKeyCol]);
           newRow[primaryKeyCol] = newRowData[primaryKeyCol];
           pkValueFound = true;
         }
@@ -445,31 +435,28 @@ const TableView = () => {
           }
         }
         
-        console.log('Final new row data to display:', newRow);
-        
-        const newData = data.map((row) => 
+        setData(prevData => prevData.map((row) =>
           row._tempId === tempId ? { ...newRow, _tempId: undefined } : row
-        );
-        setData(newData);
+        ));
+        
+        setPagination(prev => ({
+          ...prev,
+          total: prev.total + 1
+        }));
+        
+        setNewRowData({});
+        setShowAddForm(false);
+        toast.success('Row added successfully');
       }
-      
-      // Reset form
-      setNewRowData({});
-      setShowAddForm(false);
-      toast.success('Row added successfully');
-      
-      // Always refresh data from server to ensure UI is up-to-date
-      console.log('Refreshing data from server after adding row');
-      fetchData();
     } catch (err) {
       console.error('Error adding row:', err);
       toast.error('Failed to add row. Please try again.');
       
       // Remove temp row on error
-      setData(data.filter((row) => !row._tempId));
+      setData(prevData => prevData.filter((row) => !row._tempId));
     }
   };
-
+  
   // Show confirmation dialog before deleting a row
   const handleDeleteClick = (rowId) => {
     setRowToDelete(rowId);
@@ -480,7 +467,7 @@ const TableView = () => {
   const handleDeleteRow = async (rowId) => {
     setConfirmOpen(false);
     
-    if (!rowId || !accounts || accounts.length === 0) return;
+    if (!rowId || !accounts || accounts.length === 0 || !primaryKeyCol) return;
     
     try {
       // Optimistic UI update - remove row from UI immediately
@@ -570,6 +557,12 @@ const TableView = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {noPrimaryKey && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4" role="alert">
+          <p className="font-bold">Warning: No Primary Key</p>
+          <p>This table does not have a primary key. Editing and deleting rows is disabled.</p>
+        </div>
+      )}
       <div className="flex items-center mb-6">
         <button
           onClick={() => navigate('/')}
