@@ -1,18 +1,16 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.auth.token import get_current_user
-from backend.app.routers import tables, data, debug
-from backend.database.connection import engine, Base
+from backend.app.routers import tables, data, debug, settings
+from backend.database.connection import Base
 
-# Create tables
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Data Entry API")
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # React frontend URL
+    allow_origins=["*"],  # Allow all origins for development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -22,6 +20,7 @@ app.add_middleware(
 app.include_router(tables.router, prefix="/tables", tags=["tables"])
 app.include_router(data.router, prefix="/data", tags=["data"])
 app.include_router(debug.router, prefix="/debug", tags=["debug"])
+app.include_router(settings.router, tags=["settings"])
 
 @app.get("/")
 async def root():

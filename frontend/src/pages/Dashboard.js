@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast';
 import { apiConfig } from '../authConfig';
 import { getAccessToken } from '../services/authService';
 import { TableCellsIcon } from '@heroicons/react/24/outline';
+import DbSettingsForm from '../components/DbSettingsForm';
 
 const Dashboard = () => {
   const { instance, accounts } = useMsal();
@@ -12,60 +13,52 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [dbInfo, setDbInfo] = useState(null);
   const [showDbInfo, setShowDbInfo] = useState(false);
+  const [settings, setSettings] = useState(null);
   
-  useEffect(() => {
-    const fetchTables = async () => {
-      try {
-        console.log('Dashboard - Fetching tables, accounts:', accounts);
-        
-        // Prima proviamo con l'endpoint di test che non richiede autenticazione
-        const testApiUrl = `${apiConfig.baseUrl}/debug/test-tables`;
-        console.log('Dashboard - Fetching from test URL:', testApiUrl);
-        
-        const testResponse = await fetch(testApiUrl);
-        
-        if (testResponse.ok) {
-          console.log('Dashboard - Test API response status:', testResponse.status);
-          const data = await testResponse.json();
-          console.log('Dashboard - Received tables data from test endpoint:', data);
-          setTables(data);
-          setLoading(false);
-          return;
-        }
-        
-        // Se l'endpoint di test fallisce, proviamo con l'endpoint autenticato
-        console.log('Dashboard - Test endpoint failed, trying authenticated endpoint');
-        const accessToken = await getAccessToken(instance, accounts[0]);
-        console.log('Dashboard - Got access token, length:', accessToken?.length);
-        
-        const apiUrl = `${apiConfig.baseUrl}${apiConfig.endpoints.tables}`;
-        console.log('Dashboard - Fetching from URL:', apiUrl);
-        
-        const response = await fetch(apiUrl, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          }
-        });
-        
-        console.log('Dashboard - API response status:', response.status);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Dashboard - Error response body:', errorText);
-          throw new Error(`Error fetching tables: ${response.status} ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        console.log('Dashboard - Received tables data:', data);
+  // Fetch tables function should be top-level so it can be called after settings save
+  const fetchTables = async () => {
+    try {
+      // (existing fetch logic)
+      console.log('Dashboard - Fetching tables, accounts:', accounts);
+      const testApiUrl = `${apiConfig.baseUrl}/debug/test-tables`;
+      console.log('Dashboard - Fetching from test URL:', testApiUrl);
+      const testResponse = await fetch(testApiUrl);
+      if (testResponse.ok) {
+        console.log('Dashboard - Test API response status:', testResponse.status);
+        const data = await testResponse.json();
+        console.log('Dashboard - Received tables data from test endpoint:', data);
         setTables(data);
-      } catch (error) {
-        console.error('Dashboard - Failed to fetch tables:', error);
-        toast.error('Failed to load tables. Please try again.');
-      } finally {
         setLoading(false);
+        return;
       }
-    };
-    
+      // If test endpoint fails, try authenticated endpoint
+      console.log('Dashboard - Test endpoint failed, trying authenticated endpoint');
+      const accessToken = await getAccessToken(instance, accounts[0]);
+      console.log('Dashboard - Got access token, length:', accessToken?.length);
+      const apiUrl = `${apiConfig.baseUrl}${apiConfig.endpoints.tables}`;
+      console.log('Dashboard - Fetching from URL:', apiUrl);
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
+      console.log('Dashboard - API response status:', response.status);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Dashboard - Error response body:', errorText);
+        throw new Error(`Error fetching tables: ${response.status} ${response.statusText}`);
+      }
+      const data = await response.json();
+      console.log('Dashboard - Received tables data:', data);
+      setTables(data);
+      setLoading(false);
+    } catch (error) {
+      setLoading(false);
+      console.error('Dashboard - Failed to fetch tables:', error);
+    }
+  };
+
+  useEffect(() => {
     fetchTables();
   }, [instance, accounts]);
   
@@ -110,15 +103,72 @@ const Dashboard = () => {
         <h3 className="text-lg leading-6 font-medium text-gray-900">Available Tables</h3>
         <div>
           <button
-            onClick={fetchDbInfo}
+            onClick={async () => {
+              // Fetch settings from backend
+              try {
+                const res = await fetch('http://localhost:8000/settings/db-credentials');
+                if (res.ok) {
+                  const data = await res.json();
+                  // Map new API format { field: { value, source } } to flat { field: value }
+                  const flat = {
+                    tenant_id: data.tenant_id?.value || '',
+                    client_id: data.client_id?.value || '',
+                    client_secret: data.client_secret?.value || '',
+                    endpoint: data.endpoint?.value || '',
+                    database: data.database?.value || '',
+                    port: data.port?.value || '1433',
+                  };
+                  setSettings(flat);
+                } else {
+                  setSettings({});
+                }
+              } catch (e) {
+                setSettings({});
+              }
+              setShowDbInfo('settings');
+            }}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
-            Check Database Connection
+            Database Connection Settings
           </button>
         </div>
       </div>
       
-      {showDbInfo && dbInfo && (
+      {showDbInfo === 'settings' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6 relative">
+            <h3 className="text-xl font-bold mb-2">Database Connection Settings</h3>
+            <p className="mb-4 text-gray-600">Set or override the Tenant ID, Client Secret, and Endpoint for the database connection. These values override the environment variables when set.</p>
+            <DbSettingsForm
+              initialSettings={settings || {}}
+              onSave={async (settings) => {
+                try {
+                  const response = await fetch('http://localhost:8000/settings/db-credentials', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(settings),
+                  });
+                  if (response.ok) {
+                    toast.success('Database connection settings saved!');
+                    // Refresh tables after successful save
+                    await fetchTables();
+                  } else {
+                    toast.error('Failed to save settings');
+                  }
+                } catch (err) {
+                  toast.error('Failed to save settings');
+                }
+                setShowDbInfo(false);
+              }}
+              onCancel={() => setShowDbInfo(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {showDbInfo === 'info' && dbInfo && (
         <div className="mt-6 bg-white shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6">
             <h3 className="text-lg leading-6 font-medium text-gray-900">Database Information</h3>

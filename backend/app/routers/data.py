@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text, Table as SQLATable, MetaData
 from typing import Dict, Any, Optional, List
 from backend.app.auth.token import get_current_user
-from backend.database.connection import get_db, engine
+from backend.database.connection import get_db, get_engine
 from backend.models.models import User, Table, UserTableAccess
 from backend.app.routers.debug import is_identity_column
 
@@ -155,7 +155,7 @@ async def get_table_data(
     
     try:
         # Execute the queries
-        with engine.connect() as connection:
+        with get_engine().connect() as connection:
             # Get total count
             result = connection.execute(text(count_query))
             total_count = result.scalar()

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import inspect, text
-from backend.database.connection import get_db, engine
+from backend.database.connection import get_db, get_engine
 from backend.models.models import User, Table, UserTableAccess
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -386,7 +386,7 @@ async def get_test_table_data(
         query += f" ORDER BY (SELECT NULL) OFFSET {(page - 1) * page_size} ROWS FETCH NEXT {page_size} ROWS ONLY"
         
         # Execute the queries
-        with engine.connect() as connection:
+        with get_engine().connect() as connection:
             # Get total count
             result = connection.execute(text(count_query))
             total_count = result.scalar() or 0
@@ -460,7 +460,7 @@ async def get_db_info(db: Session = Depends(get_db)):
         connection_result = "Connection successful"
         
         # Get database tables
-        inspector = inspect(engine)
+        inspector = inspect(get_engine())
         tables = inspector.get_table_names()
         
         # Get users

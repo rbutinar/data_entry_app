@@ -19,8 +19,7 @@ The following features are planned for upcoming releases:
 
 - **Data entry for tables without a primary key:**
   - Allow insert, edit, and delete operations even when no PK is defined, with appropriate UI and backend support.
-- **Configurable SQL endpoints:**
-  - Let users/admins set or change the SQL endpoint(s) directly from the app interface, including settings for which database or query to analyze.
+
 - **Flexible authentication:**
   - Support both credential-based (admin-defined) and Microsoft Entra ID (Azure AD) passthrough authentication, configurable via settings.
 - **Excel-like grid with AG Grid or similar:**
@@ -55,6 +54,36 @@ A React-based front-end web app that connects to a SQL database (Azure SQL or Po
 - Apply filters to data
 - Update individual cells or entire records
 - Server-side access control based on user permissions
+
+---
+
+## Dynamic Runtime Database Settings (NEW)
+
+You can now update the app's Azure SQL or Microsoft Fabric database connection settings at runtime, directly from the frontend UI—no backend restart required!
+
+### How it works
+- Open the **Database Settings** modal from the dashboard.
+- Enter or update the database connection parameters (endpoint, port, database name, tenant ID, client ID, client secret, etc.).
+- Save to immediately apply the new settings. The backend will use these for new connections without a restart.
+- The frontend will refresh the tables list automatically after saving.
+- If no runtime settings are provided, the backend falls back to the `.env` file values.
+- Settings are stored in memory only (not persisted)—restarting the backend resets to `.env`.
+
+### Supported Parameters
+- SQL Server/Fabric endpoint
+- Port
+- Database name (optional for Fabric Warehouse endpoints)
+- Azure AD Tenant ID
+- Azure AD Client ID
+- Azure AD Client Secret
+- Optional: Encrypt, TrustServerCertificate, Timeout
+
+### Security Notes
+- **No secrets are persisted**: All overrides are in-memory for the backend session only.
+- **Do not use in production** without securing the settings API and UI.
+- For public/demo use, no user secrets are stored server-side or in the browser.
+
+---
 
 ## Tech Stack
 

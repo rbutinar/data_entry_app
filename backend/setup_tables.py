@@ -8,7 +8,7 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
 from sqlalchemy import inspect
-from backend.database.connection import engine, get_db
+from backend.database.connection import get_engine, get_db
 from backend.models.models import User, Table, UserTableAccess
 from sqlalchemy.orm import Session
 
@@ -27,7 +27,7 @@ def setup_tables():
     
     try:
         # Get all tables from the database
-        inspector = inspect(engine)
+        inspector = inspect(get_engine())
         db_tables = inspector.get_table_names()
         print(f"Found tables in database: {db_tables}")
         
