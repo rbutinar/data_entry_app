@@ -11,7 +11,24 @@
 - Improved cell editing experience with proper focus management.
 - No known blocking issues remain for standard usage.
 
-> **Note:** Tables without a primary key are not currently supported.
+---
+
+## Planned Features & Roadmap
+
+The following features are planned for upcoming releases:
+
+- **Data entry for tables without a primary key:**
+  - Allow insert, edit, and delete operations even when no PK is defined, with appropriate UI and backend support.
+- **Configurable SQL endpoints:**
+  - Let users/admins set or change the SQL endpoint(s) directly from the app interface, including settings for which database or query to analyze.
+- **Flexible authentication:**
+  - Support both credential-based (admin-defined) and Microsoft Entra ID (Azure AD) passthrough authentication, configurable via settings.
+- **Excel-like grid with AG Grid or similar:**
+  - Option to use AG Grid React or a similar library for a more "Excel-style" data entry and editing experience, including advanced features like copy-paste, fill handle, and keyboard navigation.
+
+If you are interested in contributing or have feature requests, please open an issue or PR!
+
+---
 
 A React-based front-end web app that connects to a SQL database (Azure SQL or PostgreSQL) and allows authenticated users to browse available tables, view and edit data in a spreadsheet-like table, apply filters, and update individual cells or entire records.
 
