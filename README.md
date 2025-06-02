@@ -26,6 +26,7 @@ The following features are planned for upcoming releases:
   - Option to use AG Grid React or a similar library for a more "Excel-style" data entry and editing experience, including advanced features like copy-paste, fill handle, and keyboard navigation.
 - **Cloud publishing for public use:**
   - Publish the app on Azure Function App and Azure Web App for public use, including deployment instructions and best practices.
+  - **[WORK IN PROGRESS]** Azure Functions integration is currently being implemented to enable serverless deployment. The `/backend/azure` directory contains the necessary configuration files for Azure Functions deployment.
 
 If you are interested in contributing or have feature requests, please open an issue or PR!
 
@@ -82,6 +83,28 @@ You can now update the app's Azure SQL or Microsoft Fabric database connection s
 - **No secrets are persisted**: All overrides are in-memory for the backend session only.
 - **Do not use in production** without securing the settings API and UI.
 - For public/demo use, no user secrets are stored server-side or in the browser.
+
+---
+
+## Azure Functions Deployment (Work in Progress)
+
+This branch contains work-in-progress code to enable deployment of the backend API to Azure Functions. This serverless approach will allow for better scalability and reduced hosting costs.
+
+### Current Status
+- Basic Azure Functions configuration is set up in `/backend/azure/`
+- The FastAPI app is wrapped with Azure Functions ASGI adapter
+- Local testing scripts are available in `/backend/azure/run_func.sh`
+
+### To Run Locally with Azure Functions
+```bash
+cd backend/azure
+./run_func.sh
+```
+
+### Known Issues
+- Route configuration is being finalized to ensure proper API routing
+- Python environment path issues are being addressed for consistent local development
+- Authentication flow needs to be tested in the Azure Functions environment
 
 ---
 
