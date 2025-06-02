@@ -4,7 +4,7 @@ import { useMsal } from '@azure/msal-react';
 import { toast } from 'react-hot-toast';
 import { apiConfig } from '../authConfig';
 import { getAccessToken } from '../services/authService';
-import { TableCellsIcon } from '@heroicons/react/24/outline';
+import { TableCellsIcon, ViewColumnsIcon, Squares2X2Icon } from '@heroicons/react/24/outline';
 import DbSettingsForm from '../components/DbSettingsForm';
 
 const Dashboard = () => {
@@ -237,9 +237,8 @@ const Dashboard = () => {
       ) : (!showDbInfo && tables.length > 0 && (
         <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {tables.map((table) => (
-            <Link
+            <div
               key={table.id}
-              to={`/table/${table.name}`}
               className="block bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-shadow duration-300"
             >
               <div className="p-5">
@@ -255,14 +254,23 @@ const Dashboard = () => {
                   </div>
                 </div>
               </div>
-              <div className="bg-gray-50 px-5 py-3">
-                <div className="text-sm">
-                  <span className="font-medium text-primary-600 hover:text-primary-700">
-                    View and edit data
-                  </span>
-                </div>
+              <div className="bg-gray-50 px-5 py-3 flex justify-between">
+                <Link
+                  to={`/table/${table.name}`}
+                  className="text-sm font-medium text-primary-600 hover:text-primary-700 flex items-center"
+                >
+                  <ViewColumnsIcon className="h-4 w-4 mr-1" />
+                  Standard View
+                </Link>
+                <Link
+                  to={`/excel-table/${table.name}`}
+                  className="text-sm font-medium text-green-600 hover:text-green-700 flex items-center"
+                >
+                  <Squares2X2Icon className="h-4 w-4 mr-1" />
+                  Excel View
+                </Link>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       ))}

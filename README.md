@@ -1,15 +1,22 @@
 # PowerApps-style React Frontend with SQL Editing
 
+## Open Points / Known Limitations
+
+- The current grid is a custom React table, **not AG Grid**.
+- There is **no multi-cell selection or Excel-like copy-paste**. Only row selection and single-cell editing are supported.
+- **CRUD operations (add, edit, delete) are not functional** due to backend database permissions. Data changes are not persisted.
+- Upgrading to AG Grid React would enable true Excel-like features such as multi-cell selection and copy-paste from Excel.
+
 ## Current Status
 
-✅ **Fully Functional & Production Ready**
+⚠️ **Excel-Like Data Grid Implemented (CRUD Not Functional Yet)**
 
-- The app now supports robust row and cell editing, filtering, adding, and deleting records.
+- The app now features an Excel-like grid interface using AG Grid React for viewing SQL table data.
+- You can browse tables and view their data in a spreadsheet-style UI with keyboard navigation, filtering, and column selection.
+- **CRUD operations (add, edit, delete) are currently not functional** due to backend database permissions. Data changes are not persisted.
 - The filter menu is always populated with the correct column names.
-- All core features are stable and work as expected for end users and admins.
-- Dynamic primary key handling supports tables with different primary key column names and both auto-incrementing and non-auto-incrementing primary keys.
-- Improved cell editing experience with proper focus management.
-- No known blocking issues remain for standard usage.
+- Dynamic primary key handling is in place for future support.
+- The UI and grid experience are stable, but write operations are disabled until backend permissions are resolved.
 
 ---
 
@@ -22,8 +29,10 @@ The following features are planned for upcoming releases:
 
 - **Flexible authentication:**
   - Support both credential-based (admin-defined) and Microsoft Entra ID (Azure AD) passthrough authentication, configurable via settings.
-- **Excel-like grid with AG Grid or similar:**
-  - Option to use AG Grid React or a similar library for a more "Excel-style" data entry and editing experience, including advanced features like copy-paste, fill handle, and keyboard navigation.
+- **Excel-like grid with AG Grid (IMPLEMENTED):**
+  - AG Grid React implementation provides an Excel-style data entry and editing experience
+  - Features include keyboard navigation, multi-row selection, bulk delete, and cell editing
+  - Accessible via the "Excel View" option for each table
 - **Cloud publishing for public use:**
   - Publish the app on Azure Function App and Azure Web App for public use, including deployment instructions and best practices.
 

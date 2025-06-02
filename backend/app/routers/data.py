@@ -222,6 +222,11 @@ async def update_row(
             pk_col = pk_cols['constrained_columns'][0]
             print(f"[DEBUG] Using detected primary key column: {pk_col}")
 
+        # Remove the primary key column from updates if present
+        updates = {k: v for k, v in updates.items() if k != pk_col}
+        if not updates:
+            raise HTTPException(status_code=400, detail="No columns to update (primary key cannot be updated)")
+
         # Build the update query using parameterized statements
         set_parts = []
         values = []

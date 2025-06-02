@@ -48,8 +48,8 @@ export const loginRequest = {
 export const apiConfig = {
   baseUrl: "http://localhost:8000", // FastAPI backend URL
   endpoints: {
-    tables: "/tables/",
-    data: "/data/",
+    tables: "/tables",
+    data: "/data",
     me: "/me"
   }
 };

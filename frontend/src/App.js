@@ -9,6 +9,7 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import TableView from './pages/TableView';
+import ExcelTableView from './pages/ExcelTableView';
 
 // Protected route component
 const ProtectedRoute = ({ children }) => {
@@ -93,6 +94,13 @@ function App() {
           <ProtectedRoute>
             <Layout>
               <TableView />
+            </Layout>
+          </ProtectedRoute>
+        } />
+        <Route path="/excel-table/:tableName" element={
+          <ProtectedRoute>
+            <Layout>
+              <ExcelTableView />
             </Layout>
           </ProtectedRoute>
         } />

@@ -1,0 +1,224 @@
+/* Custom AG Grid styles to make it look more like Excel */
+
+/* Overall grid container */
+.ag-theme-alpine {
+  --ag-header-height: 32px;
+  --ag-header-foreground-color: #000;
+  --ag-header-background-color: #f3f3f3;
+  --ag-header-cell-hover-background-color: #e6e6e6;
+  --ag-header-cell-moving-background-color: #c7c7c7;
+  
+  /* Cell styling */
+  --ag-cell-horizontal-padding: 8px;
+  --ag-row-height: 28px;
+  --ag-row-border-color: #e2e2e2;
+  --ag-cell-horizontal-border: solid 1px var(--ag-row-border-color);
+  --ag-cell-vertical-border: solid 1px var(--ag-row-border-color);
+  
+  /* Selection colors */
+  --ag-selected-row-background-color: rgba(0, 145, 234, 0.1);
+  --ag-range-selection-border-color: #2196f3;
+  --ag-range-selection-background-color: rgba(33, 150, 243, 0.2);
+  
+  /* Focus */
+  --ag-range-selection-border-style: solid;
+  --ag-range-selection-border-width: 2px;
+  
+  /* Font */
+  --ag-font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --ag-font-size: 14px;
+}
+
+/* Force display of grid */
+#myGrid {
+  display: block !important;
+  visibility: visible !important;
+}
+
+/* Header styling */
+.ag-theme-alpine .ag-header {
+  font-weight: bold;
+  border-bottom: 2px solid #d9d9d9;
+}
+
+/* AG Grid Custom Styles for Excel-like appearance */
+
+/* Cell borders and styling */
+.ag-theme-alpine .ag-cell {
+  border: 1px solid #e2e8f0;
+  padding-left: 8px;
+  padding-right: 8px;
+  line-height: 26px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Header styling */
+.ag-theme-alpine .ag-header-cell {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-weight: 600;
+}
+
+/* Row hover */
+.ag-theme-alpine .ag-row:hover {
+  background-color: #f1f5f9;
+}
+
+/* Selected row */
+.ag-theme-alpine .ag-row-selected {
+  background-color: #e0f2fe;
+}
+
+/* Selected cell */
+.ag-theme-alpine .ag-cell-focus {
+  border: 2px solid #3b82f6 !important;
+}
+
+/* Editing cell */
+.ag-theme-alpine .ag-cell-inline-editing {
+  padding: 0;
+  height: 100%;
+}
+
+.ag-theme-alpine .ag-cell-inline-editing input {
+  height: 100%;
+  width: 100%;
+  padding: 0 8px;
+  border: 2px solid #3b82f6;
+  outline: none;
+}
+
+/* Remove default focus outline */
+.ag-theme-alpine .ag-cell-focus:not(.ag-cell-inline-editing) {
+  outline: none;
+}
+
+/* Grid container */
+.ag-theme-alpine {
+  --ag-border-color: #e2e8f0;
+  --ag-header-background-color: #f8fafc;
+  --ag-odd-row-background-color: #ffffff;
+  --ag-row-hover-color: #f1f5f9;
+  --ag-selected-row-background-color: #e0f2fe;
+  --ag-font-size: 14px;
+  --ag-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Fix for grid visibility issues */
+.ag-root-wrapper {
+  border: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  height: 100% !important;
+}
+
+.ag-root {
+  flex: 1 !important;
+  overflow: hidden !important;
+}
+
+.ag-body-viewport {
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+}
+
+.ag-body-horizontal-scroll {
+  display: flex !important;
+}
+
+/* Ensure grid container is visible */
+.ag-theme-alpine {
+  display: block !important;
+  visibility: visible !important;
+  height: 500px !important;
+  width: 100% !important;
+  min-height: 500px !important;
+}
+
+/* Excel-like alternating row colors */
+.ag-theme-alpine .ag-row-even {
+  background-color: #ffffff;
+}
+
+.ag-theme-alpine .ag-row-odd {
+  background-color: #f8fafc;
+}
+
+/* Excel-like header */
+.ag-theme-alpine .ag-header {
+  border-bottom: 2px solid #cbd5e1;
+  font-weight: bold;
+}
+
+/* Excel-like cell selection */
+.ag-theme-alpine .ag-cell.ag-cell-range-selected {
+  background-color: rgba(59, 130, 246, 0.2);
+}
+
+/* Excel-like column separator */
+.ag-theme-alpine .ag-header-cell::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 1px;
+  background-color: #cbd5e1;
+}
+
+/* Primary key column styling */
+.ag-theme-alpine .ag-cell.primary-key-cell {
+  background-color: #f0f9ff;
+  font-weight: bold;
+}
+
+/* Improve cell editor appearance */
+.ag-theme-alpine .ag-cell-inline-editing {
+  padding: 0;
+  height: 100%;
+}
+
+.ag-theme-alpine input.ag-cell-edit-input {
+  height: 100%;
+  padding: 0 8px;
+  border: 2px solid #2196f3;
+}
+
+/* Add Excel-like grid lines */
+.ag-theme-alpine .ag-cell {
+  border-right: 1px solid #e2e2e2;
+  border-bottom: 1px solid #e2e2e2;
+}
+
+/* Improve header appearance */
+.ag-theme-alpine .ag-header-cell {
+  font-weight: bold;
+  text-align: center;
+  border-right: 1px solid #d9d9d9;
+}
+
+/* Alternating row colors (Excel-like) */
+.ag-theme-alpine .ag-row-even {
+  background-color: #ffffff;
+}
+
+.ag-theme-alpine .ag-row-odd {
+  background-color: #f8f8f8;
+}
+
+/* Fix for AG Grid visibility issues */
+.ag-root-wrapper {
+  display: flex !important;
+}
+
+.ag-root {
+  flex: 1;
+}
+
+/* Make sure rows are visible */
+.ag-center-cols-container {
+  min-height: 28px;
+  width: 100% !important;
+}
