@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import inspect, text
 from backend.database.connection import get_db, get_engine
@@ -87,70 +87,69 @@ async def update_test_table_row(
     row_id: int,
     updates: Dict[str, Any],
     pk: str = None,
+    original: Dict[str, Any] = Body(default=None),
     db: Session = Depends(get_db)
 ):
     """
     Test endpoint to update a row in a table without authentication.
+    If the table has no primary key, use the 'original' row dict to match the row.
     """
     try:
-        print(f"\n\n=== UPDATE TEST TABLE ROW ===\nTable: {table_name}\nRow ID: {row_id}\nUpdates: {updates}\n===========================")
-        
-        # Check if the table exists in the database schema
+        print(f"\n\n=== UPDATE TEST TABLE ROW ===\nTable: {table_name}\nRow ID: {row_id}\nUpdates: {updates}\nOriginal: {original}\n===========================")
         from sqlalchemy import inspect, text
         inspector = inspect(db.get_bind())
         db_table_names = inspector.get_table_names()
-        
         if table_name not in db_table_names:
             return {"success": False, "error": f"Table '{table_name}' not found in database"}
-        
+        columns = inspector.get_columns(table_name)
+        pk_constraint = inspector.get_pk_constraint(table_name)
+        primary_key = pk or (pk_constraint["constrained_columns"][0] if pk_constraint and pk_constraint["constrained_columns"] else None)
         try:
-            # Try direct raw SQL execution using pyodbc for better permission handling
-            # Get the raw connection from SQLAlchemy
             connection = db.connection()
             cursor = connection.connection.cursor()
-            
-            # Build the update query using parameterized statements
             set_parts = []
             values = []
-            
-            # Remove primary key from updates if present
-            if primary_key := (pk if pk else 'id'):
-                updates = {k: v for k, v in updates.items() if k != primary_key}
             for key, value in updates.items():
                 set_parts.append(f"{key} = ?")
                 values.append(value)
-                
-            # Add the row_id parameter at the end
-            values.append(row_id)
-            
-            # Use provided primary key column name if available, otherwise use 'id'
-            primary_key = pk if pk else 'id'
-            print(f"Using primary key column: {primary_key}")
-            
             set_clause = ", ".join(set_parts)
-            query = f"UPDATE {table_name} SET {set_clause} WHERE {primary_key} = ?"
-            print(f"Executing query: {query} with values: {values}")
-            
+            # If PK exists, use it for WHERE
+            if primary_key:
+                values.append(row_id)
+                query = f"UPDATE {table_name} SET {set_clause} WHERE {primary_key} = ?"
+                print(f"[PK mode] Executing query: {query} with values: {values}")
+            else:
+                # No PK: require 'original' dict
+                if not original or not isinstance(original, dict):
+                    return {"success": False, "error": "Table has no primary key; must provide full original row as 'original' in request body."}
+                where_parts = []
+                where_values = []
+                for col in columns:
+                    colname = col["name"]
+                    if colname not in original:
+                        return {"success": False, "error": f"Original row missing column '{colname}'"}
+                    where_parts.append(f"{colname} = ?")
+                    where_values.append(original[colname])
+                query = f"UPDATE {table_name} SET {set_clause} WHERE " + " AND ".join(where_parts)
+                values += where_values
+                print(f"[NO PK mode] Executing query: {query} with values: {values}")
             try:
-                # Execute the update
                 cursor.execute(query, values)
                 rows_affected = cursor.rowcount
                 connection.commit()
-                
                 if rows_affected == 0:
-                    return {"success": False, "error": f"Row {row_id} not found in table {table_name}"}
+                    return {"success": False, "error": f"No matching row found for update in table {table_name}"}
+                elif rows_affected > 1:
+                    return {"success": True, "warning": f"{rows_affected} rows updated (ambiguous match)", "message": f"Rows updated in table {table_name}"}
                 else:
-                    return {"success": True, "message": f"Row {row_id} updated successfully in table {table_name}"}
-                    
+                    return {"success": True, "message": f"Row updated successfully in table {table_name}"}
             except Exception as sql_error:
-                # Roll back on error
                 connection.rollback()
                 print(f"SQL Error: {sql_error}")
                 return {"success": False, "error": f"SQL Error: {str(sql_error)}"}
         except Exception as conn_error:
             print(f"Connection error: {conn_error}")
             return {"success": False, "error": f"Connection error: {str(conn_error)}"}
-            
     except Exception as e:
         print(f"Error updating row: {str(e)}")
         return {"success": False, "error": f"Error updating row: {str(e)}"}
@@ -290,49 +289,57 @@ async def delete_test_table_row(
     table_name: str,
     row_id: int,
     pk: str = None,
+    original: Dict[str, Any] = Body(default=None),
     db: Session = Depends(get_db)
 ):
     """
     Test endpoint to delete a row from a table without authentication.
+    If the table has no primary key, use the 'original' row dict to match the row.
     """
     try:
-        print(f"\n\n=== DELETE TEST TABLE ROW ===\nTable: {table_name}\nRow ID: {row_id}\n===========================")
-        
-        # Check if the table exists in the database schema
+        print(f"\n\n=== DELETE TEST TABLE ROW ===\nTable: {table_name}\nRow ID: {row_id}\nOriginal: {original}\n===========================")
         from sqlalchemy import inspect, text
         inspector = inspect(db.get_bind())
         db_table_names = inspector.get_table_names()
-        
         if table_name not in db_table_names:
             return {"success": False, "error": f"Table '{table_name}' not found in database"}
-        
+        columns = inspector.get_columns(table_name)
+        pk_constraint = inspector.get_pk_constraint(table_name)
+        primary_key = pk or (pk_constraint["constrained_columns"][0] if pk_constraint and pk_constraint["constrained_columns"] else None)
         try:
-            # Try direct raw SQL execution using pyodbc for better permission handling
-            # Get the raw connection from SQLAlchemy
             connection = db.connection()
             cursor = connection.connection.cursor()
-            
-            # Use provided primary key column name if available, otherwise use 'id'
-            primary_key = pk if pk else 'id'
-            print(f"Using primary key column: {primary_key}")
-            
-            # Build the delete query using parameterized statements
-            query = f"DELETE FROM {table_name} WHERE {primary_key} = ?"
-            print(f"Executing query: {query} with values: [{row_id}]")
-            
+            # If PK exists, use it for WHERE
+            if primary_key:
+                query = f"DELETE FROM {table_name} WHERE {primary_key} = ?"
+                values = [row_id]
+                print(f"[PK mode] Executing query: {query} with values: {values}")
+            else:
+                # No PK: require 'original' dict
+                if not original or not isinstance(original, dict):
+                    return {"success": False, "error": "Table has no primary key; must provide full original row as 'original' in request body."}
+                where_parts = []
+                where_values = []
+                for col in columns:
+                    colname = col["name"]
+                    if colname not in original:
+                        return {"success": False, "error": f"Original row missing column '{colname}'"}
+                    where_parts.append(f"{colname} = ?")
+                    where_values.append(original[colname])
+                query = f"DELETE FROM {table_name} WHERE " + " AND ".join(where_parts)
+                values = where_values
+                print(f"[NO PK mode] Executing query: {query} with values: {values}")
             try:
-                # Execute the delete
-                cursor.execute(query, [row_id])
+                cursor.execute(query, values)
                 rows_affected = cursor.rowcount
                 connection.commit()
-                
                 if rows_affected == 0:
-                    return {"success": False, "error": f"Row {row_id} not found in table {table_name}"}
+                    return {"success": False, "error": f"No matching row found for delete in table {table_name}"}
+                elif rows_affected > 1:
+                    return {"success": True, "warning": f"{rows_affected} rows deleted (ambiguous match)", "message": f"Rows deleted in table {table_name}"}
                 else:
-                    return {"success": True, "message": f"Row {row_id} deleted successfully from table {table_name}"}
-                    
+                    return {"success": True, "message": f"Row deleted successfully from table {table_name}"}
             except Exception as sql_error:
-                # Roll back on error
                 connection.rollback()
                 print(f"SQL Error: {sql_error}")
                 return {"success": False, "error": f"SQL Error: {str(sql_error)}"}

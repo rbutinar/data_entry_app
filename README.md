@@ -4,12 +4,13 @@
 
 ✅ **Fully Functional & Production Ready**
 
-- The app now supports robust row and cell editing, filtering, adding, and deleting records.
+- The app now supports robust row and cell editing, filtering, adding, and deleting records **for tables with a primary key**.
+- **⚠️ Edit/delete for tables without a primary key ("No Primary Key Management") is under development and not yet functional in the frontend. Backend debug endpoints are experimental.**
 - The filter menu is always populated with the correct column names.
-- All core features are stable and work as expected for end users and admins.
+- All core features are stable and work as expected for end users and admins (for tables with a PK).
 - Dynamic primary key handling supports tables with different primary key column names and both auto-incrementing and non-auto-incrementing primary keys.
 - Improved cell editing experience with proper focus management.
-- No known blocking issues remain for standard usage.
+- No known blocking issues remain for standard usage (with a PK).
 
 ---
 
@@ -19,6 +20,7 @@ The following features are planned for upcoming releases:
 
 - **Data entry for tables without a primary key:**
   - Allow insert, edit, and delete operations even when no PK is defined, with appropriate UI and backend support.
+  - **⚠️ NOTE: This feature is under development. Backend debug endpoints support this experimentally, but the frontend does not yet support editing or deleting rows in tables without a primary key.**
 
 - **Flexible authentication:**
   - Support both credential-based (admin-defined) and Microsoft Entra ID (Azure AD) passthrough authentication, configurable via settings.
