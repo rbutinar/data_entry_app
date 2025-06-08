@@ -37,32 +37,8 @@ jobs:
 
       # Optional: Add step to run tests here
 
-      - name: Zip artifact for deployment
-        run: zip -r release.zip ./*
-        working-directory: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
-
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-app
-          path: |
-            ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/release.zip
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: python-app
-
-      - name: Unzip artifact for deployment
-        run: unzip release.zip
+      - name: Install Azure Functions Core Tools
+        run: npm install -g azure-functions-core-tools@4 --unsafe-perm true
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -71,10 +47,6 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_D74B7BB9CBEB432F92186128FBE8A912 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_7FCA0247D269459EBE3C832E3B570F20 }}
 
-      - name: 'Deploy to Azure Functions'
-        uses: Azure/functions-action@v1
-        id: deploy-to-function
-        with:
-          app-name: 'data-entry-app-backend'
-          slot-name: 'Production'
-          package: '.'
+      - name: Publish Function App with Core Tools
+        run: func azure functionapp publish data-entry-app-backend --python
+        working-directory: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
