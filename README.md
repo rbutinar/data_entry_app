@@ -160,17 +160,25 @@ If you receive `{ "detail": "Not Found" }`, double-check the table name or use t
 ### 1. List Tables
 - **Endpoint:** `GET /tables/`
 - **Description:** Returns all tables accessible to the user.
-- **Example:**
+- **Example (FastAPI backend):**
   ```sh
   curl -L -X GET "http://localhost:8000/tables/"
+  ```
+- **Example (Azure Function App backend):**
+  ```sh
+  curl -L -X GET "http://localhost:9000/tables/"
   ```
 
 ### 2. Get Table Data (Read)
 - **Endpoint:** `GET /data/{table_name}`
 - **Description:** Returns data from a table, supports pagination and filtering.
-- **Example:**
+- **Example (FastAPI backend):**
   ```sh
   curl -L -X GET "http://localhost:8000/data/tabella_1?page=1&page_size=10"
+  ```
+- **Example (Azure Function App backend):**
+  ```sh
+  curl -L -X GET "http://localhost:9000/data/tabella_1?page=1&page_size=10"
   ```
 
 ### 3. Insert Row (Create)
@@ -178,7 +186,19 @@ If you receive `{ "detail": "Not Found" }`, double-check the table name or use t
 - **Description:** Insert a new row into the specified table. Supports dynamic primary key columns.
 - **Parameters:**
   - `pk` (optional): Specify the primary key column name if different from 'id'
-- **Example:**
+- **Example (FastAPI backend):**
+  ```sh
+  curl -L -X POST "http://localhost:8000/data/tabella_1?pk=newid" \
+    -H "Content-Type: application/json" \
+    -d '{"nome": "test", "valore": 123}'
+  ```
+- **Example (Azure Function App backend):**
+  ```sh
+  curl -L -X POST "http://localhost:9000/data/tabella_1?pk=newid" \
+    -H "Content-Type: application/json" \
+    -d '{"nome": "test", "valore": 123}'
+  ```
+
   ```sh
   curl -L -X POST "http://localhost:8000/data/tabella_1?pk=newid" \
     -H "Content-Type: application/json" \

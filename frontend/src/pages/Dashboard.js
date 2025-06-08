@@ -106,7 +106,7 @@ const Dashboard = () => {
             onClick={async () => {
               // Fetch settings from backend
               try {
-                const res = await fetch('http://localhost:8000/settings/db-credentials');
+                const res = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000'}/settings/db-credentials`);
                 if (res.ok) {
                   const data = await res.json();
                   // Map new API format { field: { value, source } } to flat { field: value }
@@ -143,7 +143,7 @@ const Dashboard = () => {
               initialSettings={settings || {}}
               onSave={async (settings) => {
                 try {
-                  const response = await fetch('http://localhost:8000/settings/db-credentials', {
+                  const response = await fetch(`${process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000'}/settings/db-credentials`, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',

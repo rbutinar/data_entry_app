@@ -4,6 +4,7 @@ from sqlalchemy import create_engine, MetaData
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
+import os
 
 # Import override_settings if present
 try:
@@ -12,7 +13,9 @@ except ImportError:
     override_settings = {}
 
 # Load environment variables
-load_dotenv()
+# Always load .env from the backend directory
+backend_env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+load_dotenv(backend_env_path)
 
 # Helper to get config with override
 get_env = lambda key, default=None: override_settings.get(key) or os.getenv(key, default)

@@ -1,9 +1,12 @@
 import os
 import pyodbc
 from dotenv import load_dotenv
+import os
 
 # Load environment variables
-load_dotenv()
+# Always load .env from the backend directory
+backend_env_path = os.path.join(os.path.dirname(__file__), '.env')
+load_dotenv(backend_env_path)
 
 # Get database connection details from environment variables
 SERVER = os.getenv("SQL_SERVER_ENDPOINT")

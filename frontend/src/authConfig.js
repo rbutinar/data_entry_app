@@ -46,7 +46,7 @@ export const loginRequest = {
 
 // API endpoints
 export const apiConfig = {
-  baseUrl: "http://localhost:8000", // FastAPI backend URL
+  baseUrl: process.env.REACT_APP_API_BASE_URL || "http://localhost:8000", // Backend URL (configurable via .env)
   endpoints: {
     tables: "/tables/",
     data: "/data/",
