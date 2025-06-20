@@ -7,7 +7,6 @@ README.md
 *.md
 
 # Development files
-.env
 .vscode
 .idea
 

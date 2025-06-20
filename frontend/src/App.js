@@ -8,7 +8,7 @@ import { toast } from 'react-hot-toast';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import TableView from './pages/TableView';
+import { TableViewContainer } from './components/TableView';
 
 // Protected route component
 const ProtectedRoute = ({ children }) => {
@@ -92,7 +92,7 @@ function App() {
         <Route path="/table/:tableName" element={
           <ProtectedRoute>
             <Layout>
-              <TableView />
+              <TableViewContainer />
             </Layout>
           </ProtectedRoute>
         } />
