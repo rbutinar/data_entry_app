@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  data-entry-app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # SQL Server connection - add your values in .env or override here
+      - SQL_SERVER_ENDPOINT=${SQL_SERVER_ENDPOINT}
+      - SQL_SERVER_PORT=${SQL_SERVER_PORT:-1433}
+      - SQL_DATABASE_NAME=${SQL_DATABASE_NAME}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
+      - SQL_ENCRYPT=${SQL_ENCRYPT:-true}
+      - SQL_TRUST_CERTIFICATE=${SQL_TRUST_CERTIFICATE:-false}
+      - SQL_TIMEOUT=${SQL_TIMEOUT:-30}
+    volumes:
+      # For development - mount source code for live reload
+      - ./backend:/app/backend:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional: Add a local SQL Server for development/testing
+  # sqlserver:
+  #   image: mcr.microsoft.com/mssql/server:2022-latest
+  #   environment:
+  #     - ACCEPT_EULA=Y
+  #     - MSSQL_SA_PASSWORD=YourStrong!Passw0rd
+  #   ports:
+  #     - "1433:1433"
+  #   volumes:
+  #     - sqlserver_data:/var/opt/mssql
+
+# volumes:
+#   sqlserver_data:
