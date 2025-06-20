@@ -4,11 +4,14 @@
 
 ✅ **Fully Functional & Production Ready**
 
+- **🚀 LIVE IN PRODUCTION**: https://data-entry-app-prod--a5dnzgk.lemoncoast-2884006a.westeurope.azurecontainerapps.io
 - The app now supports robust row and cell editing, filtering, adding, and deleting records.
 - The filter menu is always populated with the correct column names.
 - All core features are stable and work as expected for end users and admins.
 - Dynamic primary key handling supports tables with different primary key column names and both auto-incrementing and non-auto-incrementing primary keys.
 - Improved cell editing experience with proper focus management.
+- **Fully containerized** with Docker and deployed on Azure Container Apps
+- **Terraform infrastructure** for reproducible deployments
 - No known blocking issues remain for standard usage.
 
 ---
@@ -24,14 +27,40 @@ The following features are planned for upcoming releases:
   - Support both credential-based (admin-defined) and Microsoft Entra ID (Azure AD) passthrough authentication, configurable via settings.
 - **Excel-like grid with AG Grid or similar:**
   - Option to use AG Grid React or a similar library for a more "Excel-style" data entry and editing experience, including advanced features like copy-paste, fill handle, and keyboard navigation.
-- **Cloud publishing for public use:**
-  - Publish the app on Azure Function App and Azure Web App for public use, including deployment instructions and best practices.
+- **CI/CD Pipeline:**
+  - GitHub Actions workflow for automated build and deployment
+- **Advanced monitoring:**
+  - Application Insights integration for performance monitoring
 
 If you are interested in contributing or have feature requests, please open an issue or PR!
 
 ---
 
 A React-based front-end web app that connects to a SQL database (Azure SQL or PostgreSQL) and allows authenticated users to browse available tables, view and edit data in a spreadsheet-like table, apply filters, and update individual cells or entire records.
+
+## Deployment Options
+
+### 🚀 **Production (Azure Container Apps)**
+- **Live URL**: https://data-entry-app-prod--a5dnzgk.lemoncoast-2884006a.westeurope.azurecontainerapps.io
+- **Infrastructure**: Terraform managed
+- **Auto-scaling**: 1-3 replicas based on load
+- **Monitoring**: Azure Log Analytics integration
+
+### 🐳 **Docker (Local)**
+```bash
+docker-compose up --build
+# App available at http://localhost:8000
+```
+
+### 🛠️ **Development (Local)**
+```bash
+# Backend
+cd backend && python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt && python run.py
+
+# Frontend (separate terminal)
+cd frontend && npm install && npm start
+```
 
 ## How to Use
 

@@ -3,8 +3,8 @@ export const msalConfig = {
   auth: {
     clientId: "0ed8cf17-a7f1-4e23-b869-d19777fba7cc", // Use the same client ID as in .env
     authority: "https://login.microsoftonline.com/f66009f9-3aae-4a4e-9161-974b63e7eb6a", // Use tenant ID from .env
-    redirectUri: "http://localhost:3000",
-    postLogoutRedirectUri: "http://localhost:3000",
+    redirectUri: window.location.origin,
+    postLogoutRedirectUri: window.location.origin,
     navigateToLoginRequestUrl: true,
   },
   cache: {
@@ -46,7 +46,7 @@ export const loginRequest = {
 
 // API endpoints
 export const apiConfig = {
-  baseUrl: "http://localhost:8000", // FastAPI backend URL
+  baseUrl: window.location.origin, // Dynamic backend URL based on current origin
   endpoints: {
     tables: "/tables/",
     data: "/data/",

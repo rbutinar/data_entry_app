@@ -23,6 +23,20 @@ frontend/.DS_Store
 # Mac system files
 .DS_Store
 
+# Terraform
+terraform/.terraform/
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/terraform.tfvars
+terraform/.terraform.lock.hcl
+
+# Docker & Build artifacts
+bin/
+terraform.zip
+*.zip
+*.tar.gz
+gh_*_linux_amd64/
+
 # Legacy (still ignore just in case)
 backend/app/__pycache__/
 backend/app/auth/__pycache__/
